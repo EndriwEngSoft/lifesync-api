@@ -46,6 +46,11 @@ public class Task {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    // cascade = ALL + orphanRemoval: uma SubTask nao tem existencia propria
+    // fora da Task pai (se a Task morre, as subtasks morrem junto). Regra
+    // geral: cascade ALL so quando o filho nao existe fora do pai — por
+    // isso Task -> User NAO usa cascade (deletar/desativar um User nao
+    // deveria apagar as Tasks em cascata).
     @OneToMany(
             mappedBy = "task",
             cascade = CascadeType.ALL,
