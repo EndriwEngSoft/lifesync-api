@@ -16,3 +16,14 @@ spring:
 
 server:
   port: 8080
+
+jwt:
+  # JWT_SECRET precisa ter no minimo 32 caracteres (256 bits) — exigencia do
+  # algoritmo HS256 usado pelo jjwt. Chave curta demais lanca WeakKeyException
+  # em runtime. NUNCA versionar o valor real de producao, so este fallback de dev.
+  secret: ${JWT_SECRET:lifesync-secret-key-to-development-2026}
+  # Access token: vida curta (24h) — se vazar, o estrago e limitado.
+  expiration: ${JWT_EXPIRATION:86400000}
+  # Refresh token: vida mais longa (7 dias) — so serve para pedir um novo
+  # access token, sem exigir login de novo toda hora.
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
