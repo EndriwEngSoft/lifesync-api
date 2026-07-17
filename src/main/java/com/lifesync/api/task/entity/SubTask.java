@@ -21,10 +21,11 @@ public class SubTask {
     @Column(nullable = false)
     private String title;
 
-    // @Builder.Default: sem essa anotacao, @Builder ignora o "= false"
-    // abaixo e gera boolean com o default puro do Java (que tambem seria
-    // false aqui, mas o alerta do proprio Maven no build pedia a anotacao
-    // explicita para deixar a intencao clara).
+    /**
+     * Builder.Default aqui evita que o builder gere esse campo ignorando
+     * o {@code = false}. O warning do proprio Maven no build foi o que
+     * acusou a falta dessa anotacao.
+     */
     @Builder.Default
     @Column(nullable = false)
     private boolean completed = false;

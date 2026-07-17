@@ -10,7 +10,10 @@ import java.util.UUID;
 @Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
 
-    // Usado no cadastro (checar email duplicado) e no login (autenticar por email).
+    /**
+     * Usado no cadastro para checar email duplicado e no login para
+     * autenticar o usuario.
+     */
     Optional<User> findByEmail(String email);
 
 }

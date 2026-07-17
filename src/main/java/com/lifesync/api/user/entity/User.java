@@ -29,16 +29,20 @@ public class User extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String email;
 
-    // @JsonIgnore garante que o hash da senha nunca seja serializado numa
-    // resposta JSON, mesmo se essa entidade for retornada direto (sem DTO)
-    // por engano em algum endpoint futuro.
+    /**
+     * Nunca serializado no JSON. Se essa entidade acabar sendo retornada
+     * direto num endpoint (sem passar por DTO), o hash da senha continua
+     * protegido mesmo assim.
+     */
     @JsonIgnore
     @Column(nullable = false)
     private String passwordHash;
 
-    // @Builder.Default e obrigatorio aqui: o Lombok @Builder ignora valores
-    // de inicializacao de campo por padrao. Sem essa anotacao, User.builder()
-    // sem informar role/active geraria null/false silenciosamente.
+    /**
+     * O Builder do Lombok ignora inicializacao de campo por padrao, entao
+     * sem essa anotacao {@code User.builder()...build()} sem passar role
+     * viria null, nao USER.
+     */
     @Builder.Default
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -49,6 +53,10 @@ public class User extends BaseEntity {
         ADMIN
     }
 
+    /**
+     * Mesmo caso do role: sem Builder.Default o builder gera false aqui,
+     * ignorando o {@code = true}.
+     */
     @Builder.Default
     @Column(nullable = false)
     private boolean active = true;

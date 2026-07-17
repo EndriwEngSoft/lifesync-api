@@ -11,10 +11,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Adapta a entidade de dominio User para o contrato UserDetails que o
- * Spring Security espera. E o "traducao" entre "como eu modelo usuario
- * no meu negocio" e "como o Spring Security entende usuario" — assim o
- * resto do framework de seguranca nunca precisa conhecer a classe User
+ * Adapta a entidade User para o contrato UserDetails do Spring Security.
+ * O resto do modulo de seguranca so conhece essa classe, nunca a User
  * diretamente.
  */
 public class SecurityUser implements UserDetails {
@@ -59,8 +57,11 @@ public class SecurityUser implements UserDetails {
         return true;
     }
 
-    // Prefixo "ROLE_" e exigido pelo Spring Security para reconhecer a
-    // authority como um papel (usado depois em @PreAuthorize("hasRole(...)")).
+    /**
+     * Prefixo ROLE_ e exigido pelo Spring Security pra reconhecer isso
+     * como um papel (relevante mais pra frente, em {@code @PreAuthorize
+     * ("hasRole(...)")}).
+     */
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_" + this.user.getRole().name()));

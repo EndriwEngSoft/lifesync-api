@@ -1,8 +1,10 @@
 package com.lifesync.api.task.enums;
 
-// Transicoes validas ainda nao sao validadas em codigo (ver secao 7 do
-// ARCHITECTURE.md: InvalidStateTransitionException, a criar quando o
-// TaskService de fato existir).
+/**
+ * Transicoes entre esses status ainda nao sao validadas em codigo.
+ * Ver ARCHITECTURE.md secao 7: InvalidStateTransitionException entra
+ * quando o TaskService for implementado.
+ */
 public enum Status {
 
     PENDING,
