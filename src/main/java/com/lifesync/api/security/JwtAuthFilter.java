@@ -38,6 +38,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
 
+    /**
+     * Se o token for valido, monta a autenticacao a partir do usuario que
+     * ele referencia. Qualquer falha nesse processo (ex: usuario deletado
+     * depois do token ter sido emitido) fica so no log — nao propaga erro,
+     * so segue sem autenticar, e quem barra o acesso depois e a regra de
+     * authorization no SecurityConfig.
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -72,10 +79,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (Exception e) {
-                // Token valido na assinatura, mas algo deu errado montando a
-                // autenticacao (ex: usuario foi deletado depois do token ser
-                // emitido). Nao propaga o erro - so segue sem autenticar,
-                // e quem bloqueia o acesso depois e a regra de authorization.
                 log.warn("Failed to authenticate user from JWT: {}", e.getMessage());
             }
         }

@@ -36,6 +36,10 @@ public class SecurityConfig {
      * (o ataque de CSRF depende de cookie de sessao pra funcionar). O unico
      * mecanismo de autenticacao e o Bearer token via JwtAuthFilter — nao
      * ha Basic Auth nem form login habilitado, de proposito.
+     *
+     * So cadastro/login/refresh sao publicos. "/api/users/me" nao entra
+     * na lista de liberados de proposito: o proprio endpoint so faz
+     * sentido pra quem ja esta autenticado.
      */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -46,9 +50,6 @@ public class SecurityConfig {
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                 )
                 .authorizeHttpRequests(authz -> authz
-                        // so cadastro/login/refresh sao publicos. "/api/users/me"
-                        // NAO entra aqui - o proprio endpoint so faz sentido pra
-                        // quem ja esta autenticado.
                         .requestMatchers("/api/auth/**")
                         .permitAll()
                         .anyRequest()
