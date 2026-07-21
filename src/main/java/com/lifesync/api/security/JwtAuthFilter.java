@@ -60,7 +60,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String token = header.substring(7);
 
-        if (jwtTokenProvider.validateToken(token)) {
+        if (jwtTokenProvider.validateToken(token) && jwtTokenProvider.isAccessToken(token)) {
             try {
                 String userIdString = jwtTokenProvider.getUserIdFromToken(token);
                 UUID userId = UUID.fromString(userIdString);
