@@ -8,6 +8,9 @@ import org.springframework.stereotype.Service;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.Optional;
+import java.util.UUID;
+
 @RequiredArgsConstructor
 @Service
 public class UserService {
@@ -21,11 +24,21 @@ public class UserService {
      * de volta na resposta, pra nao dar pra um atacante descobrir contas
      * existentes so testando o endpoint em massa.
      */
-    public void registerUser(User user) {
+    public User registerUser(User user) {
         if (userRepository.findByEmail(user.getEmail()).isPresent()) {
             throw new DuplicateResourceException("Email already exists.");
         }
         user.setPasswordHash(passwordEncoder.encode(user.getPasswordHash()));
-        userRepository.save(user);
+        return userRepository.save(user);
+    }
+
+    /**
+     * Devolve Optional em vez de lancar ResourceNotFoundException aqui
+     * de proposito: quem chama pode ter um motivo diferente pra tratar
+     * "nao encontrado" (ex: AuthService.refreshToken usa uma mensagem
+     * especifica pro contexto de renovacao de token).
+     */
+    public Optional<User> findById(UUID id) {
+        return userRepository.findById(id);
     }
 }
