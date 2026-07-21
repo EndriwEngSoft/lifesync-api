@@ -5,6 +5,8 @@ import com.lifesync.api.security.JwtAuthenticationEntryPoint;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -37,9 +39,9 @@ public class SecurityConfig {
      * mecanismo de autenticacao e o Bearer token via JwtAuthFilter — nao
      * ha Basic Auth nem form login habilitado, de proposito.
      *
-     * So cadastro/login/refresh sao publicos. "/api/users/me" nao entra
-     * na lista de liberados de proposito: o proprio endpoint so faz
-     * sentido pra quem ja esta autenticado.
+     * So cadastro/login/refresh e a documentacao Swagger sao publicos.
+     * "/api/users/me" nao entra na lista de liberados de proposito: o
+     * proprio endpoint so faz sentido pra quem ja esta autenticado.
      */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -50,7 +52,11 @@ public class SecurityConfig {
                         .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                 )
                 .authorizeHttpRequests(authz -> authz
-                        .requestMatchers("/api/auth/**")
+                        .requestMatchers(
+                                "/api/auth/**",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html")
                         .permitAll()
                         .anyRequest()
                         .authenticated()
@@ -58,5 +64,10 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
     }
 }
