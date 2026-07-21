@@ -44,6 +44,33 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Conta desativada tentando executar uma acao que exige estar ativa
+     * (ex: renovar token). WARN, sem stack trace - causa ja conhecida.
+     */
+    @ExceptionHandler(InactiveAccountException.class)
+    public ResponseEntity<ApiErrorResponse> handleInactiveAccountException(
+            InactiveAccountException e,  HttpServletRequest request) {
+        log.warn("Inactive account exception occurred: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(new ApiErrorResponse(HttpStatus.FORBIDDEN.value(), e.getMessage(), request.getRequestURI()));
+    }
+
+    /**
+     * Token JWT invalido no contexto (assinatura/expiracao quebrada, ou
+     * tipo errado - access no lugar de refresh, ou vice-versa). WARN,
+     * sem stack trace - causa ja conhecida.
+     */
+    @ExceptionHandler(InvalidTokenException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidTokenException(
+            InvalidTokenException e,  HttpServletRequest request) {
+        log.warn("Invalid token exception occurred: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(new ApiErrorResponse(HttpStatus.UNAUTHORIZED.value(), e.getMessage(), request.getRequestURI()));
+    }
+
+    /**
      * Catch-all pra qualquer exception que nao foi prevista pelos handlers
      * acima. A resposta pro cliente fica com mensagem generica de proposito
      * — o motivo real vai so pro log (ERROR, com stack trace completo),
