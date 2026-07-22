@@ -1,5 +1,6 @@
 package com.lifesync.api.task.entity;
 
+import com.lifesync.api.common.BaseEntity;
 import com.lifesync.api.task.enums.Priority;
 import com.lifesync.api.task.enums.Status;
 import com.lifesync.api.user.entity.User;
@@ -18,7 +19,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Task {
+public class Task extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
