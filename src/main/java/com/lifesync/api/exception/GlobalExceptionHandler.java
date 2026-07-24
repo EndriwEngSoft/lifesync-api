@@ -71,6 +71,19 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * IDOR revelado (403 - o recurso existe, mas o acesso e negado).
+     * Ainda sem uso real no codigo - ver Javadoc de UnauthorizedActionException.
+     */
+    @ExceptionHandler(UnauthorizedActionException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnauthorizedActionException(
+            UnauthorizedActionException e,  HttpServletRequest request) {
+        log.warn("Unauthorized action exception occurred: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(new ApiErrorResponse(HttpStatus.FORBIDDEN.value(), e.getMessage(), request.getRequestURI()));
+    }
+
+    /**
      * Catch-all pra qualquer exception que nao foi prevista pelos handlers
      * acima. A resposta pro cliente fica com mensagem generica de proposito
      * — o motivo real vai so pro log (ERROR, com stack trace completo),
