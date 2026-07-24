@@ -59,6 +59,12 @@ public class TaskService {
         return toResponseDTO(savedTask);
     }
 
+    /**
+     * findByIdAndUserId ja e a defesa contra IDOR: se a Task nao pertencer
+     * a esse userId, a query devolve vazio e o orElseThrow dispara antes
+     * de qualquer coisa. Nao precisa (e nao deveria) checar posse de novo
+     * aqui dentro - isso ja aconteceu no nivel da query.
+     */
     @Transactional(readOnly = true)
     public TaskResponseDTO getTaskById(UUID taskId, UUID userId) {
         Task task = taskRepository.findByIdAndUserId(taskId, userId)
