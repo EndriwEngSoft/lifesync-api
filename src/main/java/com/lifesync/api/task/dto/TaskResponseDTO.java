@@ -11,6 +11,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Traz o SubTaskResponseDTO aninhado, mas nunca a entidade User inteira -
+ * so os campos que fazem sentido expor (userId, userName), evitando o
+ * mesmo problema de referencia circular que existiria serializando a
+ * entidade Task direto (Task -> subTasks -> SubTask -> task -> ...).
+ */
 @Getter
 @Setter
 @NoArgsConstructor
