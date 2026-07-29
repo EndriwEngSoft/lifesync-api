@@ -16,4 +16,13 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      */
     Optional<User> findByEmail(String email);
 
+    /**
+     * "AndIdNot" exclui o proprio usuario da checagem - essencial pro
+     * updateMe: sem isso, salvar o perfil sem mudar email/username
+     * acusaria duplicidade contra si mesmo.
+     */
+    boolean existsByEmailAndIdNot(String email, UUID id);
+
+    boolean existsByUsernameAndIdNot(String username, UUID id);
+
 }
