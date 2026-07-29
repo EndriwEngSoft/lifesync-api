@@ -61,4 +61,14 @@ public class User extends BaseEntity {
     @Column(nullable = false)
     private boolean active = true;
 
+    /**
+     * IANA timezone id (ex: "America/Sao_Paulo"). Usado no calculo de
+     * "hoje" no HabitService.checkIn - sem isso, o servidor usaria seu
+     * proprio fuso (geralmente UTC em nuvem), o que pode registrar o
+     * check-in no dia errado perto da meia-noite local do usuario.
+     */
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "varchar(255) default 'America/Sao_Paulo'")
+    private String timezone = "America/Sao_Paulo";
+
 }
