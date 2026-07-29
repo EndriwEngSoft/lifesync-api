@@ -75,10 +75,10 @@ public class TaskService {
 
     /**
      * Lista paginada das tarefas do usuario autenticado. Filtros de
-     * status/priority (previstos no ARCHITECTURE.md) ainda nao
-     * implementados - podem entrar depois como Specification ou queries
-     * derivadas adicionais no TaskRepository, sem mudar a assinatura
-     * publica deste metodo (o Pageable ja fica pronto pro controller).
+     * status/priority ainda nao implementados - podem entrar depois como
+     * Specification ou queries derivadas adicionais no TaskRepository,
+     * sem mudar a assinatura publica deste metodo (o Pageable ja fica
+     * pronto pro controller).
      */
     @Transactional(readOnly = true)
     public Page<TaskResponseDTO> getAllTasks(UUID userId, Pageable pageable) {
@@ -123,10 +123,9 @@ public class TaskService {
      * marcada como concluida em tal data).
      *
      * Validacao de transicoes invalidas (ex: DONE -> CANCELLED sem passar
-     * por IN_PROGRESS) fica deliberadamente fora desta versao - e o caso
-     * de uso real que justificaria criar InvalidStateTransitionException
-     * (ver ARCHITECTURE.md secao 7), mas exige definir a maquina de
-     * estados antes. Por ora, qualquer transicao e aceita.
+     * por IN_PROGRESS) fica deliberadamente fora desta versao - exige
+     * definir a maquina de estados antes de fazer sentido. Por ora,
+     * qualquer transicao e aceita.
      */
     @Transactional
     public TaskResponseDTO updateTaskStatus(UUID taskId, UUID userId, UpdateTaskStatusRequestDTO dto) {

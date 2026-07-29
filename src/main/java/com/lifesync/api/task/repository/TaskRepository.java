@@ -12,6 +12,10 @@ import java.util.UUID;
 @Repository
 public interface TaskRepository extends JpaRepository<Task, UUID> {
 
+    /**
+     * Escopada pelo dono de proposito: se a task nao pertencer a esse
+     * userId, devolve vazio - nunca a task de outro usuario.
+     */
     Optional<Task> findByIdAndUserId(UUID id, UUID userId);
 
     Page<Task> findByUserId(UUID userId, Pageable pageable);

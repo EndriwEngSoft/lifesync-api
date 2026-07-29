@@ -13,6 +13,12 @@ public interface SubTaskRepository extends JpaRepository<SubTask, UUID> {
 
     List<SubTask> findByTaskId(UUID taskId);
 
+    /**
+     * Escopada pela Task pai, nao so pelo id da subtask: sem isso, um
+     * usuario dono da Task A poderia mandar o id de uma subtask da Task B
+     * (de outro usuario) e conseguir mexer nela, contanto que soubesse o
+     * UUID.
+     */
     Optional<SubTask> findByIdAndTaskId(UUID id, UUID taskId);
 
 }

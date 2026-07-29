@@ -7,9 +7,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Dados de entrada do login. Senha so tem @NotBlank, sem @Size - validacao
- * de tamanho minimo e politica pra senha nova (cadastro), nao pra senha
- * ja existente que so esta sendo conferida contra o hash salvo.
+ * Dados de entrada do login. Senha so tem {@code @NotBlank}, sem
+ * {@code @Size} - validacao de tamanho minimo e politica pra senha nova
+ * (cadastro), nao pra senha ja existente que so esta sendo conferida
+ * contra o hash salvo.
  */
 @Getter
 @Setter

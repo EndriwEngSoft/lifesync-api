@@ -18,8 +18,8 @@ import static org.springframework.http.HttpStatus.*;
 
 /**
  * Endpoints de Task e SubTask. Nenhum metodo recebe userId como parametro
- * do cliente - todos extraem via @AuthenticationPrincipal, direto do
- * SecurityUser que o JwtAuthFilter ja colocou no SecurityContext. Toda
+ * do cliente - todos extraem via {@code @AuthenticationPrincipal}, direto
+ * do SecurityUser que o JwtAuthFilter ja colocou no SecurityContext. Toda
  * logica de posse (IDOR) fica no TaskService, nao aqui.
  */
 @Tag(name = "Task", description = "Endpoints de Tarefas")

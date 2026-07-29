@@ -14,7 +14,7 @@ import java.time.Instant;
  *
  * Toda entidade deve estender esta classe em vez de declarar seus proprios
  * createdAt/updatedAt — evita duplicacao de coluna e de logica de callback
- * (@PrePersist/@PreUpdate) espalhada pelo projeto.
+ * ({@code @PrePersist}/{@code @PreUpdate}) espalhada pelo projeto.
  */
 @Getter
 @MappedSuperclass
