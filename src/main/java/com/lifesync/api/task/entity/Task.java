@@ -43,7 +43,15 @@ public class Task extends BaseEntity {
 
     private Instant completedAt;
 
-    @ManyToOne
+    /**
+     * fetch = LAZY: o padrao do JPA para {@code @ManyToOne} e' EAGER
+     * (carregaria o User inteiro toda vez que uma Task e' buscada, mesmo
+     * quando nao precisa). LAZY so busca o User quando algo de fato chama
+     * task.getUser() - e como TaskService roda dentro de
+     * {@code @Transactional}, isso continua funcionando normalmente
+     * (sessao ainda aberta). Mesmo padrao usado em Habit.user.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 

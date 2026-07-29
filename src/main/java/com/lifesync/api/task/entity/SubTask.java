@@ -30,7 +30,7 @@ public class SubTask {
     @Column(nullable = false)
     private boolean completed = false;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "task_id", nullable = false)
     private Task task;
 }
