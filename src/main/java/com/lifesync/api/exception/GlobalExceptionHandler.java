@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /**
  * Handler global de excecoes da API. Todo Service/Controller que lanca uma
  * exception de negocio cai aqui, e sai daqui como um ApiErrorResponse
- * padronizado — nunca como stack trace cru na resposta.
+ * padronizado - nunca como stack trace cru na resposta.
  */
 @Slf4j
 @RestControllerAdvice
@@ -68,6 +68,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
                 .body(new ApiErrorResponse(HttpStatus.UNAUTHORIZED.value(), e.getMessage(), request.getRequestURI()));
+    }
+
+    /**
+     * Timezone de perfil invalido. O valor deve ser um ID IANA aceito pelo
+     * java.time.ZoneId, como America/Sao_Paulo.
+     */
+    @ExceptionHandler(InvalidTimezoneException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidTimezoneException(
+            InvalidTimezoneException e, HttpServletRequest request) {
+        log.warn("Invalid timezone exception occurred: {}", e.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(new ApiErrorResponse(HttpStatus.BAD_REQUEST.value(), e.getMessage(), request.getRequestURI()));
     }
 
     /**
