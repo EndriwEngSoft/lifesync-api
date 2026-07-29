@@ -1,5 +1,6 @@
 package com.lifesync.api.security;
 
+import com.lifesync.api.common.ApiErrorResponse;
 import com.lifesync.api.user.entity.User;
 import com.lifesync.api.user.repository.UserRepository;
 import jakarta.servlet.FilterChain;
@@ -8,12 +9,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -23,8 +26,8 @@ import java.util.UUID;
  * UsernamePasswordAuthenticationFilter padrao do Spring Security. Le o
  * header Authorization, valida o Bearer token e, se for valido, preenche
  * o SecurityContext com o usuario autenticado - dali pra frente o resto
- * da aplicacao (controllers, @PreAuthorize) enxerga a request como
- * autenticada normalmente.
+ * da aplicacao (controllers, {@code @PreAuthorize}) enxerga a request
+ * como autenticada normalmente.
  *
  * Se nao tiver token, ou o token for invalido, a request simplesmente
  * segue sem autenticacao - quem barra o acesso depois e o
@@ -37,6 +40,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
 
     /**
      * Se o token for valido, monta a autenticacao a partir do usuario que
@@ -69,6 +73,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                         .orElseThrow(() -> new UsernameNotFoundException("User not found with ID: " + userId));
 
                 UserDetails userDetails = new SecurityUser(user);
+
+                if (!userDetails.isEnabled()) {
+                    SecurityContextHolder.clearContext();
+                    response.setStatus(HttpStatus.FORBIDDEN.value());
+                    response.setContentType("application/json");
+                    response.getWriter().write(objectMapper.writeValueAsString(
+                            new ApiErrorResponse(
+                                    HttpStatus.FORBIDDEN.value(),
+                                    "Account is inactive.",
+                                    request.getRequestURI()
+                            )
+                    ));
+                    return;
+                }
 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(
