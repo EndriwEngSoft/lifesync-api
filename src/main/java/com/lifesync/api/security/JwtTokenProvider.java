@@ -70,12 +70,24 @@ public class JwtTokenProvider {
      * Confere assinatura e expiracao. Qualquer JwtException (expirado,
      * assinatura invalida, formato quebrado) vira false - o chamador nao
      * precisa saber o motivo exato, so se pode confiar no token ou nao.
+     *
+     * Tambem captura IllegalArgumentException: o proprio parser do jjwt
+     * documenta que lanca essa exception (que NAO e subtipo de
+     * JwtException) quando o token e nulo, vazio ou so espaco em branco -
+     * caso real de um header {@code Authorization: Bearer } sem nada
+     * depois do espaco. Sem esse catch aqui, esse caso especifico
+     * escaparia sem tratamento pra quem chama este metodo. Isso importa
+     * especialmente pro JwtAuthFilter: ele roda antes do
+     * GlobalExceptionHandler existir no ciclo da requisicao, entao uma
+     * exception nao capturada aqui quebraria o filtro inteiro (pra
+     * qualquer rota, nao so as protegidas) em vez de simplesmente tratar
+     * o token como invalido.
      */
     public boolean validateToken(String token) {
         try {
             Jwts.parser().verifyWith(key).build().parseSignedClaims(token);
             return true;
-        } catch (JwtException e) {
+        } catch (JwtException | IllegalArgumentException e) {
             log.debug("Invalid JWT token: {}", e.getMessage());
             return false;
         }
