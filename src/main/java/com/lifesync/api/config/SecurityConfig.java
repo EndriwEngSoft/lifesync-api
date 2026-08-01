@@ -42,6 +42,15 @@ public class SecurityConfig {
      * So cadastro/login/refresh e a documentacao Swagger sao publicos.
      * "/api/users/me" nao entra na lista de liberados de proposito: o
      * proprio endpoint so faz sentido pra quem ja esta autenticado.
+     *
+     * "/actuator/health" tambem e publico, de proposito: probes de
+     * liveness/readiness de orquestradores (Kubernetes, Docker Swarm,
+     * ECS) normalmente nao mandam nenhuma credencial, e exigir Bearer
+     * token aqui derrubaria o healthcheck assim que o projeto for
+     * containerizado. So esse path entra na lista - o resto de
+     * "/actuator/**" (env, beans, mappings etc.) continua exigindo
+     * autenticacao, porque esses endpoints expoe detalhe interno da
+     * aplicacao que nao deveria ser publico.
      */
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -56,7 +65,9 @@ public class SecurityConfig {
                                 "/api/auth/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
-                                "/swagger-ui.html")
+                                "/swagger-ui.html",
+                                "/actuator/health",
+                                "/actuator/health/**")
                         .permitAll()
                         .anyRequest()
                         .authenticated()
