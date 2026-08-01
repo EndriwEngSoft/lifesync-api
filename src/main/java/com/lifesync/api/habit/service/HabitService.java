@@ -90,12 +90,29 @@ public class HabitService {
     /**
      * Edicao geral (nome, descricao, frequencia, meta). Nao mexe em
      * currentStreak/longestStreak/active de proposito - esses campos so
-     * mudam via checkIn ou deleteHabit.
+     * mudam via checkIn ou deleteHabit - EXCETO currentStreak quando a
+     * frequencia muda.
+     *
+     * Motivo: isConsecutiveCheckIn decide se um check-in e consecutivo
+     * comparando com o periodo anterior segundo a frequencia ATUAL do
+     * habito. Um streak acumulado sob DAILY nao tem significado nenhum se
+     * o proximo check-in for avaliado sob as regras de WEEKLY ou MONTHLY -
+     * a comparacao ficaria matematicamente incoerente (pode tanto zerar
+     * um streak valido quanto, em tese, contar como consecutivo algo que
+     * nao era). Resetar currentStreak pra 0 na troca de frequencia evita
+     * esse caso e deixa o comportamento previsivel: trocar a frequencia
+     * comeca uma nova janela de streak. longestStreak NAO e afetado -
+     * e um recorde historico, nao um contador em andamento, e a troca de
+     * frequencia nao apaga uma conquista ja registrada.
      */
     @Transactional
     public HabitResponseDTO updateHabit(UUID habitId, HabitRequestDTO request, UUID userId) {
         Habit habit = habitRepository.findByIdAndUserId(habitId, userId)
                 .orElseThrow(() -> new ResourceNotFoundException(HABIT_NOT_FOUND));
+
+        if (habit.getFrequency() != request.getFrequency()) {
+            habit.setCurrentStreak(0);
+        }
 
         habit.setName(request.getName());
         habit.setDescription(request.getDescription());
