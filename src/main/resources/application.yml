@@ -2,6 +2,11 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/lifesync_db
     username: postgres
+    # Fallback "123456" e so pra rodar local sem precisar setar variavel de
+    # ambiente na maquina de dev - nunca deve virar senha real. Em staging/
+    # producao, DB_PASSWORD tem que vir de secret manager/variavel de
+    # ambiente do servidor, nunca deste arquivo - mesma logica do jwt.secret
+    # logo abaixo.
     password: ${DB_PASSWORD:123456}
     driver-class-name: org.postgresql.Driver
 
@@ -12,7 +17,6 @@ spring:
     properties:
       hibernate:
         format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 server:
   port: 8080
