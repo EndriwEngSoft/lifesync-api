@@ -11,6 +11,7 @@ import com.lifesync.api.security.SecurityUser;
 import com.lifesync.api.user.entity.User;
 import com.lifesync.api.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -48,16 +49,7 @@ public class AuthService {
                 .build();
 
         User savedUser = userService.registerUser(userToSave);
-        SecurityUser securityUser = new SecurityUser(savedUser);
-
-        String accessToken = jwtTokenProvider.generateAccessToken(securityUser);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(securityUser);
-
-        AuthResponse response = new AuthResponse();
-        response.setAccessToken(accessToken);
-        response.setRefreshToken(refreshToken);
-
-        return response;
+        return getAuthResponse(new SecurityUser(savedUser));
     }
 
     /**
@@ -75,14 +67,7 @@ public class AuthService {
 
         SecurityUser securityUser = (SecurityUser) authentication.getPrincipal();
 
-        String accessToken = jwtTokenProvider.generateAccessToken(securityUser);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(securityUser);
-
-        AuthResponse response = new AuthResponse();
-        response.setAccessToken(accessToken);
-        response.setRefreshToken(refreshToken);
-
-        return response;
+        return getAuthResponse(securityUser);
     }
 
     /**
@@ -109,14 +94,27 @@ public class AuthService {
             throw new InactiveAccountException("Account is inactive. Cannot refresh token.");
         }
 
-        SecurityUser securityUser = new SecurityUser(user);
+        return getAuthResponse(new SecurityUser(user));
+    }
 
-        String newAccessToken = jwtTokenProvider.generateAccessToken(securityUser);
-        String newRefreshToken = jwtTokenProvider.generateRefreshToken(securityUser);
+    /**
+     * Fonte unica pra gerar o par access+refresh token e montar o
+     * AuthResponse - register, login e refreshToken convergem pra este
+     * metodo em vez de repetirem a mesma sequencia (SecurityUser ->
+     * gerar os dois tokens -> montar o DTO). Recebe SecurityUser (nao
+     * User) porque o login ja tem um SecurityUser pronto vindo do
+     * Authentication.getPrincipal() - exigir User aqui obrigaria os
+     * outros dois fluxos a empacotar e o login a desempacotar, sem
+     * necessidade.
+     */
+    @NonNull
+    private AuthResponse getAuthResponse(SecurityUser securityUser) {
+        String accessToken = jwtTokenProvider.generateAccessToken(securityUser);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(securityUser);
 
         AuthResponse response = new AuthResponse();
-        response.setAccessToken(newAccessToken);
-        response.setRefreshToken(newRefreshToken);
+        response.setAccessToken(accessToken);
+        response.setRefreshToken(refreshToken);
 
         return response;
     }
