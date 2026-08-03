@@ -134,20 +134,6 @@ com.lifesync.api
 └── habit/        # + histórico de check-ins
 ```
 
-## Roadmap
-
-- [x] Auth — registro, login, refresh
-- [x] Perfil de usuário
-- [x] Tarefas + subtarefas
-- [x] Hábitos + cálculo de streak
-- [ ] Metas
-- [ ] Estudos
-- [ ] Finanças simples
-- [ ] Gamificação
-- [ ] Dashboard e estatísticas
-- [ ] CI/CD (GitHub Actions + Testcontainers)
-- [ ] Deploy
-
 ## Autor
 
 **Endriw Colvara Bento** — estudante de Engenharia de Software, focado em backend Java.
