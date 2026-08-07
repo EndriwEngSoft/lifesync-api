@@ -8,6 +8,7 @@ import com.lifesync.api.task.dto.TaskResponseDTO;
 import com.lifesync.api.task.dto.UpdateTaskStatusRequestDTO;
 import com.lifesync.api.task.entity.SubTask;
 import com.lifesync.api.task.entity.Task;
+import com.lifesync.api.task.enums.Priority;
 import com.lifesync.api.task.enums.Status;
 import com.lifesync.api.task.repository.SubTaskRepository;
 import com.lifesync.api.task.repository.TaskRepository;
@@ -74,15 +75,15 @@ public class TaskService {
     }
 
     /**
-     * Lista paginada das tarefas do usuario autenticado. Filtros de
-     * status/priority ainda nao implementados - podem entrar depois como
-     * Specification ou queries derivadas adicionais no TaskRepository,
-     * sem mudar a assinatura publica deste metodo (o Pageable ja fica
-     * pronto pro controller).
+     * Lista paginada das tarefas do usuario autenticado, com filtro
+     * opcional por status e/ou priority - status e priority nulos
+     * significam "sem filtro nessa dimensao", nao "nenhum resultado".
+     * A logica de opcionalidade fica toda no
+     * TaskRepository.findByUserIdWithFilters; o service so repassa.
      */
     @Transactional(readOnly = true)
-    public Page<TaskResponseDTO> getAllTasks(UUID userId, Pageable pageable) {
-        Page<Task> tasks = taskRepository.findByUserId(userId, pageable);
+    public Page<TaskResponseDTO> getAllTasks(UUID userId, Status status, Priority priority, Pageable pageable) {
+        Page<Task> tasks = taskRepository.findByUserIdWithFilters(userId, status, priority, pageable);
         return tasks.map(this::toResponseDTO);
     }
 
