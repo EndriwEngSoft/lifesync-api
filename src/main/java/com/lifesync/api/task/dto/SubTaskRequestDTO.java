@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * Usado na criacao (POST /{id}/subtasks) e na edicao de titulo
@@ -20,6 +21,7 @@ public class SubTaskRequestDTO {
 
     @NotBlank
     @Size(max = 150)
+    @Schema(description = "Título da subtask", example = "Comprar o bilhete")
     private String title;
 
 }

@@ -5,6 +5,7 @@ import com.lifesync.api.task.enums.Status;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -22,20 +23,40 @@ import java.util.UUID;
 @NoArgsConstructor
 public class TaskResponseDTO {
 
+    @Schema(description = "UUID da task")
     private UUID id;
+
+    @Schema(description = "Título da task", example = "Comprar presente")
     private String title;
+
+    @Schema(description = "Descrição da task", example = "Comprar presente de aniversário para Maria")
     private String description;
+
+    @Schema(description = "Prioridade da task", example = "MEDIUM")
     private Priority priority;
+
+    @Schema(description = "Status da task", example = "PENDING")
     private Status status;
+
+    @Schema(description = "Data de vencimento", example = "2026-12-01")
     private LocalDate dueDate;
+
+    @Schema(description = "Data de conclusão, se aplicável")
     private Instant completedAt;
 
 
+    @Schema(description = "UUID do dono da task")
     private UUID userId;
+
+    @Schema(description = "Nome do dono da task")
     private String userName;
 
+    @Schema(description = "Subtasks aninhadas")
     private List<SubTaskResponseDTO> subTasks;
 
+    @Schema(description = "Data de criação")
     private Instant createdAt;
+
+    @Schema(description = "Data da última atualização")
     private Instant updatedAt;
 }

@@ -1,6 +1,7 @@
 package com.lifesync.api.task.dto;
 
 import com.lifesync.api.task.enums.Status;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -17,6 +18,7 @@ import lombok.Setter;
 public class UpdateTaskStatusRequestDTO {
 
     @NotNull
+    @Schema(description = "Novo status da task", example = "DONE")
     private Status status;
 
 }

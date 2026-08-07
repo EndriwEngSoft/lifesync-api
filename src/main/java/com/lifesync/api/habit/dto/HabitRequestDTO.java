@@ -1,6 +1,7 @@
 package com.lifesync.api.habit.dto;
 
 import com.lifesync.api.habit.enums.HabitFrequency;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -21,15 +22,19 @@ public class HabitRequestDTO {
 
     @NotBlank
     @Size(max = 150)
+    @Schema(description = "Nome do hábito", example = "Beber 2L de água")
     private String name;
 
     @Size(max = 2000)
+    @Schema(description = "Descrição do hábito", example = "Tomar oito copos de água por dia")
     private String description;
 
     @NotNull
+    @Schema(description = "Frequência do hábito", example = "DAILY")
     private HabitFrequency frequency;
 
     @NotNull
     @Min(1)
+    @Schema(description = "Meta por período", example = "1")
     private Integer targetPerPeriod;
 }
