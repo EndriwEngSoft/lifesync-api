@@ -1,5 +1,6 @@
 # LifeSync API
 
+![CI](https://github.com/EndriwEngSoft/lifesync-api/actions/workflows/ci.yml/badge.svg)
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F?logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?logo=postgresql&logoColor=white)
@@ -26,6 +27,7 @@ Metas, estudos, finanças simples, gamificação e dashboard fazem parte do esco
 - **Lombok**
 - **JUnit 5 + Mockito + Testcontainers**
 - **Maven**
+- **GitHub Actions** — CI rodando a suíte de testes a cada push
 
 ## Decisões de arquitetura
 
@@ -117,6 +119,8 @@ Testes automatizados com JUnit 5 e Mockito, cobrindo regra de negócio real — 
 # Linux/macOS
 ./mvnw clean test
 ```
+
+A suíte também roda automaticamente a cada push via GitHub Actions (`.github/workflows/ci.yml`).
 
 ## Estrutura do projeto
 
