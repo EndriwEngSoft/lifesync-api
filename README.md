@@ -24,7 +24,7 @@ Metas, estudos, finanças simples, gamificação e dashboard fazem parte do esco
 - **springdoc-openapi** — documentação interativa via Swagger UI
 - **Bean Validation**
 - **Lombok**
-- **JUnit 5 + Mockito**
+- **JUnit 5 + Mockito + Testcontainers**
 - **Maven**
 
 ## Decisões de arquitetura
@@ -108,7 +108,7 @@ A aplicação sobe em `http://localhost:8080`. Rotas públicas: `/api/auth/**`, 
 
 ## Testes
 
-Testes automatizados com JUnit 5 e Mockito, cobrindo regra de negócio real — não só CRUD: defesa contra IDOR, distinção entre access e refresh token, condição de corrida no check-in duplicado de hábito, reset de streak na troca de frequência. Há também um teste de contexto completo do Spring, que sobe contra um PostgreSQL real (exige o banco rodando localmente pra passar).
+Testes automatizados com JUnit 5 e Mockito, cobrindo regra de negócio real — não só CRUD: defesa contra IDOR, distinção entre access e refresh token, condição de corrida no check-in duplicado de hábito, reset de streak na troca de frequência. Há também um teste de contexto completo do Spring, que sobe contra um PostgreSQL real via **Testcontainers** — exige apenas o Docker rodando localmente, sem necessidade de banco instalado à parte.
 
 ```bash
 # Windows
