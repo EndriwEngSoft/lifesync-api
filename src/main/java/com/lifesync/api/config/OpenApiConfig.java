@@ -34,8 +34,8 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("LifeSync API")
                         .description("API REST de organizacao e produtividade pessoal - tarefas, "
-                                + "habitos com calculo de streak e, nas proximas fases, metas, "
-                                + "estudos e financas.")
+                                + "habitos com calculo de streak, metas com progresso mensuravel e, "
+                                + "nas proximas fases, estudos e financas.")
                         .version("v1.0.0")
                         .contact(new Contact()
                                 .name("Endriw Colvara Bento")
