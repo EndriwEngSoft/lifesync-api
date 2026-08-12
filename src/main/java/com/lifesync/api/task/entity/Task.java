@@ -9,6 +9,7 @@ import lombok.*;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -66,5 +67,6 @@ public class Task extends BaseEntity {
             cascade = CascadeType.ALL,
             orphanRemoval = true
     )
-    private List<SubTask> subTasks;
+    @Builder.Default
+    private List<SubTask> subTasks = new ArrayList<>();
 }
