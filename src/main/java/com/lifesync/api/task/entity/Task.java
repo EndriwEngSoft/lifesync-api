@@ -1,6 +1,7 @@
 package com.lifesync.api.task.entity;
 
 import com.lifesync.api.common.BaseEntity;
+import com.lifesync.api.goal.entity.Goal;
 import com.lifesync.api.task.enums.Priority;
 import com.lifesync.api.task.enums.Status;
 import com.lifesync.api.user.entity.User;
@@ -55,6 +56,15 @@ public class Task extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    /**
+     * Opcional (nullable): uma Task pode existir sem estar vinculada a
+     * nenhuma Goal. Sem cascade - deletar a Goal nunca deve deletar a
+     * Task, so desvincula-la (goal = null), feito em GoalService.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "goal_id")
+    private Goal goal;
 
     /**
      * Cascade ALL + orphanRemoval porque uma SubTask nao existe fora da

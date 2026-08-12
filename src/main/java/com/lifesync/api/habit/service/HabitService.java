@@ -2,6 +2,8 @@ package com.lifesync.api.habit.service;
 
 import com.lifesync.api.exception.DuplicateResourceException;
 import com.lifesync.api.exception.ResourceNotFoundException;
+import com.lifesync.api.goal.entity.Goal;
+import com.lifesync.api.goal.repository.GoalRepository;
 import com.lifesync.api.habit.dto.HabitHistoryResponseDTO;
 import com.lifesync.api.habit.dto.HabitRequestDTO;
 import com.lifesync.api.habit.dto.HabitResponseDTO;
@@ -45,6 +47,7 @@ public class HabitService {
 
     private final HabitRepository habitRepository;
     private final HabitHistoryRepository habitHistoryRepository;
+    private final GoalRepository goalRepository;
     private final UserService userService;
 
     /**
@@ -63,6 +66,7 @@ public class HabitService {
         habit.setDescription(request.getDescription());
         habit.setFrequency(request.getFrequency());
         habit.setTargetPerPeriod(request.getTargetPerPeriod());
+        habit.setGoal(resolveGoal(request.getGoalId(), userId));
 
         Habit savedHabit = habitRepository.save(habit);
         return toResponseDTO(savedHabit);
@@ -118,6 +122,7 @@ public class HabitService {
         habit.setDescription(request.getDescription());
         habit.setFrequency(request.getFrequency());
         habit.setTargetPerPeriod(request.getTargetPerPeriod());
+        habit.setGoal(resolveGoal(request.getGoalId(), userId));
 
         Habit savedHabit = habitRepository.save(habit);
         return toResponseDTO(savedHabit);
@@ -136,6 +141,19 @@ public class HabitService {
 
         habit.setActive(false);
         habitRepository.save(habit);
+    }
+
+    /**
+     * goalId nulo desvincula (retorna null); nao-nulo precisa pertencer
+     * ao mesmo userId, senao 404 - mesma logica usada em
+     * TaskService.resolveGoal.
+     */
+    private Goal resolveGoal(UUID goalId, UUID userId) {
+        if (goalId == null) {
+            return null;
+        }
+        return goalRepository.findByIdAndUserId(goalId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Goal not found"));
     }
 
     @Transactional(readOnly = true)
@@ -225,6 +243,7 @@ public class HabitService {
         dto.setCurrentStreak(habit.getCurrentStreak());
         dto.setLongestStreak(habit.getLongestStreak());
         dto.setActive(habit.isActive());
+        dto.setGoalId(habit.getGoal() != null ? habit.getGoal().getId() : null);
         dto.setCreatedAt(habit.getCreatedAt());
         dto.setUpdatedAt(habit.getUpdatedAt());
 

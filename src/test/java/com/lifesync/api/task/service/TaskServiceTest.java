@@ -1,6 +1,10 @@
 package com.lifesync.api.task.service;
 
 import com.lifesync.api.exception.ResourceNotFoundException;
+import com.lifesync.api.goal.entity.Goal;
+import com.lifesync.api.goal.repository.GoalRepository;
+import com.lifesync.api.task.dto.TaskRequestDTO;
+import com.lifesync.api.task.dto.TaskResponseDTO;
 import com.lifesync.api.task.dto.UpdateTaskStatusRequestDTO;
 import com.lifesync.api.task.entity.SubTask;
 import com.lifesync.api.task.entity.Task;
@@ -43,6 +47,9 @@ class TaskServiceTest {
     private SubTaskRepository subTaskRepository;
 
     @Mock
+    private GoalRepository goalRepository;
+
+    @Mock
     private UserService userService;
 
     @InjectMocks
@@ -51,13 +58,14 @@ class TaskServiceTest {
     private UUID userId;
     private UUID taskId;
     private Task fakeTask;
+    private User fakeUser;
 
     @BeforeEach
     void setUp() {
         userId = UUID.randomUUID();
         taskId = UUID.randomUUID();
 
-        User fakeUser = new User();
+        fakeUser = new User();
         fakeUser.setId(userId);
         fakeUser.setName("Usuário Teste");
 
@@ -122,5 +130,53 @@ class TaskServiceTest {
         assertThrows(ResourceNotFoundException.class, () ->
                 taskService.toggleSubtaskCompletion(taskId, subtaskId, userId)
         );
+    }
+
+    @Test
+    void createTask_WithValidGoalId_LinksTaskToGoal() {
+        UUID goalId = UUID.randomUUID();
+        Goal fakeGoal = new Goal();
+        fakeGoal.setId(goalId);
+
+        TaskRequestDTO dto = new TaskRequestDTO();
+        dto.setTitle("Task vinculada a uma meta");
+        dto.setGoalId(goalId);
+
+        when(userService.findById(userId)).thenReturn(Optional.of(fakeUser));
+        when(goalRepository.findByIdAndUserId(goalId, userId)).thenReturn(Optional.of(fakeGoal));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskResponseDTO result = taskService.createTask(dto, userId);
+
+        assertEquals(goalId, result.getGoalId(), "goalId returned must match the linked Goal");
+    }
+
+    @Test
+    void createTask_WithGoalIdFromAnotherUser_ThrowsResourceNotFoundException() {
+        UUID goalIdFromAnotherUser = UUID.randomUUID();
+
+        TaskRequestDTO dto = new TaskRequestDTO();
+        dto.setTitle("Task tentando roubar meta de outro usuário");
+        dto.setGoalId(goalIdFromAnotherUser);
+
+        when(userService.findById(userId)).thenReturn(Optional.of(fakeUser));
+        when(goalRepository.findByIdAndUserId(goalIdFromAnotherUser, userId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () ->
+                taskService.createTask(dto, userId));
+    }
+
+    @Test
+    void createTask_WithoutGoalId_LeavesGoalIdNull() {
+        TaskRequestDTO dto = new TaskRequestDTO();
+        dto.setTitle("Task solta, sem meta");
+
+        when(userService.findById(userId)).thenReturn(Optional.of(fakeUser));
+        when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TaskResponseDTO result = taskService.createTask(dto, userId);
+
+        assertNull(result.getGoalId(), "goalId must stay null when the request doesn't provide one");
+        verify(goalRepository, never()).findByIdAndUserId(any(), any());
     }
 }

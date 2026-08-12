@@ -10,6 +10,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.util.UUID;
+
 /**
  * Usado no POST e no PUT de habito. Sem currentStreak/longestStreak/active
  * de proposito - sao campos derivados, controlados pelo servidor (via
@@ -37,4 +39,7 @@ public class HabitRequestDTO {
     @Min(1)
     @Schema(description = "Meta por período", example = "1")
     private Integer targetPerPeriod;
+
+    @Schema(description = "UUID da meta vinculada (opcional)")
+    private UUID goalId;
 }

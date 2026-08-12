@@ -1,6 +1,8 @@
 package com.lifesync.api.task.service;
 
 import com.lifesync.api.exception.ResourceNotFoundException;
+import com.lifesync.api.goal.entity.Goal;
+import com.lifesync.api.goal.repository.GoalRepository;
 import com.lifesync.api.task.dto.SubTaskRequestDTO;
 import com.lifesync.api.task.dto.SubTaskResponseDTO;
 import com.lifesync.api.task.dto.TaskRequestDTO;
@@ -37,6 +39,7 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final SubTaskRepository subTaskRepository;
+    private final GoalRepository goalRepository;
     private final UserService userService;
 
     /**
@@ -55,6 +58,7 @@ public class TaskService {
         task.setPriority(request.getPriority());
         task.setDueDate(request.getDueDate());
         task.setStatus(Status.PENDING);
+        task.setGoal(resolveGoal(request.getGoalId(), userId));
 
         Task savedTask = taskRepository.save(task);
         return toResponseDTO(savedTask);
@@ -100,9 +104,24 @@ public class TaskService {
         task.setDescription(dto.getDescription());
         task.setPriority(dto.getPriority());
         task.setDueDate(dto.getDueDate());
+        task.setGoal(resolveGoal(dto.getGoalId(), userId));
 
         Task savedTask = taskRepository.save(task);
         return toResponseDTO(savedTask);
+    }
+
+    /**
+     * goalId nulo desvincula (retorna null); nao-nulo precisa pertencer
+     * ao mesmo userId, senao 404 - mesma defesa contra IDOR usada em
+     * todo o resto do service, agora aplicada a um recurso de outro
+     * modulo.
+     */
+    private Goal resolveGoal(UUID goalId, UUID userId) {
+        if (goalId == null) {
+            return null;
+        }
+        return goalRepository.findByIdAndUserId(goalId, userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Goal not found"));
     }
 
     /**
@@ -225,6 +244,7 @@ public class TaskService {
                         .map(this::toResponseDTO)
                         .collect(Collectors.toList())
         );
+        dto.setGoalId(task.getGoal() != null ? task.getGoal().getId() : null);
         dto.setCreatedAt(task.getCreatedAt());
         dto.setUpdatedAt(task.getUpdatedAt());
         return dto;

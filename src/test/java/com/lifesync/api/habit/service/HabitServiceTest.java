@@ -1,6 +1,9 @@
 package com.lifesync.api.habit.service;
 
 import com.lifesync.api.exception.DuplicateResourceException;
+import com.lifesync.api.exception.ResourceNotFoundException;
+import com.lifesync.api.goal.entity.Goal;
+import com.lifesync.api.goal.repository.GoalRepository;
 import com.lifesync.api.habit.dto.HabitRequestDTO;
 import com.lifesync.api.habit.dto.HabitResponseDTO;
 import com.lifesync.api.habit.entity.Habit;
@@ -41,6 +44,9 @@ class HabitServiceTest {
 
     @Mock
     private HabitHistoryRepository habitHistoryRepository;
+
+    @Mock
+    private GoalRepository goalRepository;
 
     @Mock
     private UserService userService;
@@ -138,5 +144,68 @@ class HabitServiceTest {
         HabitResponseDTO response = habitService.updateHabit(habitId, request, userId);
 
         assertEquals(10, response.getCurrentStreak(), "currentStreak deveria ser preservado quando a frequencia nao muda");
+    }
+
+    @Test
+    void createHabit_WithValidGoalId_LinksHabitToGoal() {
+        UUID userId = UUID.randomUUID();
+        UUID goalId = UUID.randomUUID();
+
+        User user = User.builder().id(userId).name("Nome").build();
+        Goal fakeGoal = new Goal();
+        fakeGoal.setId(goalId);
+
+        HabitRequestDTO request = new HabitRequestDTO();
+        request.setName("Meditar");
+        request.setFrequency(HabitFrequency.DAILY);
+        request.setTargetPerPeriod(1);
+        request.setGoalId(goalId);
+
+        when(userService.findById(userId)).thenReturn(Optional.of(user));
+        when(goalRepository.findByIdAndUserId(goalId, userId)).thenReturn(Optional.of(fakeGoal));
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        HabitResponseDTO result = habitService.createHabit(request, userId);
+
+        assertEquals(goalId, result.getGoalId(), "goalId returned must match the linked Goal");
+    }
+
+    @Test
+    void createHabit_WithGoalIdFromAnotherUser_ThrowsResourceNotFoundException() {
+        UUID userId = UUID.randomUUID();
+        UUID goalIdFromAnotherUser = UUID.randomUUID();
+
+        User user = User.builder().id(userId).name("Nome").build();
+
+        HabitRequestDTO request = new HabitRequestDTO();
+        request.setName("Meditar");
+        request.setFrequency(HabitFrequency.DAILY);
+        request.setTargetPerPeriod(1);
+        request.setGoalId(goalIdFromAnotherUser);
+
+        when(userService.findById(userId)).thenReturn(Optional.of(user));
+        when(goalRepository.findByIdAndUserId(goalIdFromAnotherUser, userId)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () ->
+                habitService.createHabit(request, userId));
+    }
+
+    @Test
+    void createHabit_WithoutGoalId_LeavesGoalIdNull() {
+        UUID userId = UUID.randomUUID();
+        User user = User.builder().id(userId).name("Nome").build();
+
+        HabitRequestDTO request = new HabitRequestDTO();
+        request.setName("Meditar");
+        request.setFrequency(HabitFrequency.DAILY);
+        request.setTargetPerPeriod(1);
+
+        when(userService.findById(userId)).thenReturn(Optional.of(user));
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        HabitResponseDTO result = habitService.createHabit(request, userId);
+
+        assertEquals(null, result.getGoalId(), "goalId must stay null when the request doesn't provide one");
+        verify(goalRepository, never()).findByIdAndUserId(any(), any());
     }
 }

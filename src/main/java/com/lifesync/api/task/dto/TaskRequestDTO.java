@@ -10,6 +10,7 @@ import lombok.Setter;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.LocalDate;
+import java.util.UUID;
 
 /**
  * Usado tanto na criacao (POST) quanto na edicao geral (PUT) de uma Task.
@@ -37,5 +38,8 @@ public class TaskRequestDTO {
 
     @Schema(description = "Data de vencimento (opcional)", example = "2026-12-31")
     private LocalDate dueDate;
+
+    @Schema(description = "UUID da meta vinculada (opcional)")
+    private UUID goalId;
 
 }

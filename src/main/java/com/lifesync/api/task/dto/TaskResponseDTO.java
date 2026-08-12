@@ -54,6 +54,9 @@ public class TaskResponseDTO {
     @Schema(description = "Subtasks aninhadas")
     private List<SubTaskResponseDTO> subTasks;
 
+    @Schema(description = "UUID da meta vinculada, se houver")
+    private UUID goalId;
+
     @Schema(description = "Data de criação")
     private Instant createdAt;
 

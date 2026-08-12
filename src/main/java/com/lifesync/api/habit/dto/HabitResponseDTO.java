@@ -41,6 +41,9 @@ public class HabitResponseDTO {
     @Schema(description = "Se está ativo (não deletado)")
     private boolean active;
 
+    @Schema(description = "UUID da meta vinculada, se houver")
+    private UUID goalId;
+
     @Schema(description = "Data de criação")
     private Instant createdAt;
 

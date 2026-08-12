@@ -1,6 +1,7 @@
 package com.lifesync.api.habit.entity;
 
 import com.lifesync.api.common.BaseEntity;
+import com.lifesync.api.goal.entity.Goal;
 import com.lifesync.api.habit.enums.HabitFrequency;
 import com.lifesync.api.user.entity.User;
 import jakarta.persistence.*;
@@ -62,6 +63,15 @@ public class Habit extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    /**
+     * Opcional (nullable): um Habit pode existir sem estar vinculado a
+     * nenhuma Goal. Sem cascade - deletar a Goal nunca deve deletar o
+     * Habit, so desvincula-lo (goal = null), feito em GoalService.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "goal_id")
+    private Goal goal;
 
     /**
      * Sem cascade/orphanRemoval de proposito: a exclusao de Habit e
