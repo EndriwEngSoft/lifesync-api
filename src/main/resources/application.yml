@@ -24,7 +24,8 @@ spring:
     baseline-on-migrate: false
 
 server:
-  port: 8080
+  # Plataformas de deploy costumam injetar PORT dinamico.
+  port: ${PORT:8080}
 
 management:
   endpoints:
@@ -56,3 +57,9 @@ jwt:
   # Refresh token: vida mais longa (7 dias) — so serve para pedir um novo
   # access token, sem exigir login de novo toda hora.
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
+app:
+  cors:
+    # CSV de origens permitidas (ex.: http://localhost:3000,http://localhost:5173).
+    # Em producao, sobrescrever via APP_CORS_ALLOWED_ORIGINS.
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}

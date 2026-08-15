@@ -1,0 +1,27 @@
+# LifeSync API — Render Infrastructure as Code
+# https://render.com/docs/blueprints
+services:
+  - type: web
+    name: lifesync-api
+    runtime: docker
+    region: oregon
+    plan: free
+    branch: main
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRATION
+        value: "86400000"
+      - key: JWT_REFRESH_EXPIRATION
+        value: "604800000"
+      - key: APP_CORS_ALLOWED_ORIGINS
+        sync: false
