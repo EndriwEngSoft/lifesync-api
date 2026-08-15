@@ -35,11 +35,12 @@ public class HabitHistory {
     /**
      * Hoje sempre true: o unico fluxo que cria um {@code HabitHistory} e
      * HabitService.checkIn, que so roda quando o usuario efetivamente
-     * marca o habito como feito - nao existe ainda um fluxo que registre
-     * um periodo "perdido" ({@code completed = false}), como um job
-     * agendado que detecta ausencia de check-in num periodo encerrado. O
-     * campo fica modelado desde ja pra esse cenario futuro, evitando uma
-     * migracao de schema depois; ate la, e uma constante de fato.
+     * marca o habito como feito. Registrar um periodo "perdido"
+     * ({@code completed = false}) exigiria um job agendado detectando
+     * ausencia de check-in num periodo encerrado - fora do escopo deste
+     * projeto por decisao consciente, nao por limitacao tecnica. O campo
+     * ja existe pronto pra esse caso caso o escopo mude no futuro, o que
+     * evita uma migracao de schema adicional; ate la, e uma constante.
      */
     @Builder.Default
     @Column(nullable = false)
