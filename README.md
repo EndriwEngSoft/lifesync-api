@@ -1,129 +1,75 @@
 # LifeSync API
 
-> Uma API REST de produtividade pessoal que unifica **tarefas**, **hábitos** e **metas** sob uma única camada de autenticação com restrições de segurança reais.
+> API REST de produtividade pessoal construída em Spring Boot, unificando **tarefas**, **hábitos** e **metas** sob uma camada de autenticação JWT com proteção contra IDOR.
 
 [![CI](https://github.com/EndriwEngSoft/lifesync-api/actions/workflows/ci.yml/badge.svg)](https://github.com/EndriwEngSoft/lifesync-api/actions/workflows/ci.yml)
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://www.oracle.com/java/technologies/downloads/#java21)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
 ## Índice
 
-1. [Visão Geral](#visão-geral)
-2. [Demonstração](#demonstração)
+1. [Visão geral](#visão-geral)
+2. [Stack técnica](#stack-técnica)
 3. [Arquitetura](#arquitetura)
-4. [Tecnologias](#tecnologias)
-5. [API](#api)
-6. [Guia de Desenvolvimento](#guia-de-desenvolvimento)
+4. [Endpoints da API](#endpoints-da-api)
+5. [Como rodar localmente](#como-rodar-localmente)
+6. [Variáveis de ambiente](#variáveis-de-ambiente)
 7. [Testes](#testes)
 8. [Deploy](#deploy)
-9. [Contribuição](#contribuição)
-10. [Licença](#licença)
-11. [Autor](#autor)
-12. [Sobre](#sobre)
+9. [Licença](#licença)
+10. [Autor](#autor)
 
 ---
 
-## Visão Geral
+## Visão geral
 
-A **LifeSync API** é uma aplicação Spring Boot 4.1 que reúne três primitivos de produtividade — **tarefas** (acionáveis, binárias), **hábitos** (recorrentes, com sequência) e **metas** (progresso mensurável em direção a um alvo) — sob um modelo de segurança compartilhado. Cada módulo segue o mesmo padrão de consulta com escopo de propriedade (`id + userId`), utiliza UUIDs para identificadores e aplica proteção IDOR na camada de serviço.
+A LifeSync API reúne três domínios de produtividade pessoal — **tarefas** (ações pontuais), **hábitos** (recorrência com sequência/streak) e **metas** (progresso mensurável em direção a um alvo) — em uma única API autenticada. Cada domínio é um pacote autocontido (entidade, DTO, repositório, serviço, controller) e todos compartilham as mesmas regras de segurança e o mesmo padrão de acesso a dados.
 
-### Principais diferenciais
+Pontos que valem destaque técnico:
 
-- **Streaks de hábitos com fuso horário**: o cálculo de reset de sequência considera o fuso horário configurado pelo usuário, não o relógio do servidor.
-- **Metas com histórico mensurável**: o progresso é registrado como um valor absoluto (não um delta), e cada atualização gera uma entrada histórica.
-- **Autenticação JWT stateless**: tokens de acesso (24h) e refresh (7d) carregam um claim `type` para que um refresh token vazado não seja usado como token de acesso.
-- **Testes de integração com Testcontainers**: a suíte completa roda contra uma instância real de PostgreSQL no Docker — localmente e no CI — eliminando discrepâncias de ambiente.
+- **IDOR bloqueado por design.** Toda consulta de serviço é escopada por `(id, userId)`. Se o recurso existe mas pertence a outro usuário, a resposta é `404` — nunca `403` — para não expor a existência de recursos alheios.
+- **IDs são UUID**, não sequenciais. Evita enumeração de recursos e inferência de volume de dados pela URL.
+- **Tokens de acesso e refresh são tipados.** O JWT carrega um claim `type` (`access`/`refresh`), então um refresh token vazado não pode ser usado para autenticar em rotas protegidas.
+- **Soft delete em hábitos.** Remover um hábito marca `active = false` em vez de apagar — o histórico de check-ins (e o streak) é preservado.
+- **Testes de integração rodam contra PostgreSQL real** via Testcontainers, tanto localmente quanto no CI — sem banco em memória mascarando comportamento específico do Postgres.
 
 ---
 
-## Demonstração
+## Stack técnica
 
-### Swagger UI (documentação interativa)
-
-A API possui documentação OpenAPI 3 integrada via SpringDoc. Após iniciar localmente:
-
-```
-http://localhost:8080/swagger-ui/index.html
-```
-
-### Health Check
-
-```
-http://localhost:8080/actuator/health
-```
-
-Resposta esperada:
-
-```json
-{
-  "status": "UP"
-}
-```
-
-### Exemplo de fluxo completo
-
-```bash
-# 1. Registrar um usuário
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Endriw Bento",
-    "username": "endriw",
-    "email": "endriw@example.com",
-    "password": "senha123"
-  }'
-
-# 2. Criar uma tarefa
-ACCESS_TOKEN="<seu-access-token>"
-curl -X POST http://localhost:8080/api/tasks \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Pagar contas de luz",
-    "description": "Pagar a conta de luz da casa",
-    "priority": "HIGH",
-    "dueDate": "2025-12-10"
-  }'
-
-# 3. Marcar a tarefa como concluída
-TASK_ID="<seu-task-id>"
-curl -X PATCH "http://localhost:8080/api/tasks/$TASK_ID/status" \
-  -H "Authorization: Bearer $ACCESS_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "DONE"}'
-```
+| Camada | Tecnologia |
+|---|---|
+| Linguagem / Runtime | Java 21, Spring Boot 4.1 |
+| Web / Segurança | Spring Web, Spring Security |
+| Persistência | Spring Data JPA, Hibernate, PostgreSQL |
+| Migrações | Flyway |
+| Autenticação | JWT (jjwt 0.13.0) |
+| Documentação | SpringDoc OpenAPI 3 (Swagger UI) |
+| Testes | JUnit 5, Mockito, Testcontainers |
+| Build | Maven (via wrapper `mvnw`) |
+| Deploy | Docker (multi-stage), Render, Neon (PostgreSQL serverless) |
+| CI/CD | GitHub Actions |
 
 ---
 
 ## Arquitetura
 
-### Princípios de design
+### Estrutura de pacotes
 
-| Princípio | Implementação |
-|---|---|
-| **Proteção contra IDOR** | Toda consulta de serviço é escopada por `(id, userId)`. Um mismatch retorna `404` — nunca `403`, evitando enumeração de recursos que não pertencem ao usuário. |
-| **Identificadores UUID** | Todos os IDs de entidade usam `java.util.UUID`, prevenindo enumeração sequencial e inferência de volume. |
-| **Separação de tokens de acesso e refresh** | O claim JWT `type` (`access`/`refresh`) impede que um refresh token vazado autentique em rotas protegidas e vice-versa. |
-| **Sessões stateless** | O gerenciamento de sessão é `STATELESS`. CSRF é desativado (JWT bearer, sem cookies). Apenas o filtro `Bearer` roda. |
-| **Soft delete (hábitos)** | A remoção de um hábito define `active = false`; o histórico de check-ins é preservado para continuidade do streak. |
-| **Pacotes por domínio** | Cada contexto limitado (`auth`, `goal`, `habit`, `task`, `user`) é autocontido: entidade, DTOs, repositório, serviço e controlador. |
-| **Migrations versionadas** | Migrações Flyway em `src/main/resources/db/migration/`. O esquema é imutável após `V1__`; novas alterações exigem `V2__`, `V3__`, etc. |
-| **Actuator seguro para produção** | Apenas `/actuator/health` é público (para probes de contêiner). `env`, `beans`, `mappings` permanecem atrás de autenticação. |
-
-### Estrutura do projeto
+Organização por domínio (feature package), não por camada técnica:
 
 ```
 com.lifesync.api
-├── common/       # BaseEntity, ApiErrorResponse
+├── common/       # BaseEntity, ApiErrorResponse — compartilhados entre domínios
 ├── config/       # SecurityConfig, OpenApiConfig
 ├── exception/    # Exceções de domínio + GlobalExceptionHandler
-├── security/     # JWT provider, filtro de autenticação, UserDetails
-├── auth/         # Registro, login, refresh
-├── user/         # Gestão de perfil (/me)
+├── security/     # JwtTokenProvider, JwtAuthFilter, UserDetailsServiceImpl
+├── auth/         # Registro, login, refresh de token
+├── user/         # Perfil do usuário autenticado (/me)
 ├── task/         # Tarefas + subtarefas
 ├── habit/        # Hábitos + histórico de check-ins
 ├── goal/         # Metas + histórico de progresso
@@ -132,300 +78,186 @@ com.lifesync.api
 
 ### Relacionamento entre entidades
 
-| Entidade | Relacionamento | Comportamento no delete |
+| Relação | Tipo | Comportamento no delete |
 |---|---|---|
-| **Task** → **User** | `@ManyToOne` (LAZY) | Nenhum cascade — apagar um usuário não afeta tarefas. |
-| **Task** → **Goal** | `@ManyToOne` (opcional) | Sem cascade. Deletar uma meta desvincula (`goal = null`), não deleta a tarefa. |
-| **Task** → **SubTask** | `@OneToMany` (cascade ALL, orphanRemoval) | Subtasks deletadas em cascata com a tarefa. |
-| **Habit** → **Goal** | `@ManyToOne` (opcional) | Sem cascade. Desvincula no delete da meta. |
-| **HabitHistory** → **Habit** | `@ManyToOne` | Nenhum cascade. Preservado no soft delete. |
-| **GoalProgress** → **Goal** | `@ManyToOne` (cascade ALL) | Deletado em cascata com a meta. |
+| `Task` → `User` | `@ManyToOne` (LAZY) | Sem cascade — apagar usuário não afeta tarefas. |
+| `Task` → `Goal` | `@ManyToOne` (LAZY, opcional) | Sem cascade — apagar a meta apenas desvincula (`goal = null`). |
+| `Task` → `SubTask` | `@OneToMany` (`cascade = ALL`, `orphanRemoval = true`) | Subtarefas são apagadas junto com a tarefa. |
+| `Habit` → `Goal` | `@ManyToOne` (LAZY, opcional) | Sem cascade — desvincula ao apagar a meta. |
+| `HabitHistory` → `Habit` | `@ManyToOne` (LAZY) | Sem cascade — preservado no soft delete do hábito. |
+| `Goal` → `GoalProgress` | `@OneToMany` (`cascade = ALL`, `orphanRemoval = true`) | Histórico de progresso é apagado junto com a meta. |
 
-### Migrações do banco de dados
+### Migrações do banco (Flyway)
 
-| Versão | Descrição |
+| Versão | Conteúdo |
 |---|---|
-| `V1__create_lifesync_schema.sql` | Esquema base: `users`, `tasks`, `habits`, `habit_history`, `sub_tasks`. |
-| `V2__create_goals_and_link_task_habit.sql` | Adiciona tabelas `goals`, `goal_progress`; coluna `goal_id` como FK em `tasks` e `habits`. |
+| `V1__create_lifesync_schema.sql` | Schema base: `users`, `tasks`, `sub_tasks`, `habits`, `habit_history`. |
+| `V2__create_goals_and_link_task_habit.sql` | Cria `goals`, `goal_progress`; adiciona FK `goal_id` em `tasks` e `habits`. |
 
 ---
 
-## Tecnologias
+## Endpoints da API
 
-| Camada | Tecnologia |
-|---|---|
-| Runtime | Java 21, Spring Boot 4.1 |
-| API | Spring Web, Spring Security, Spring Data JPA |
-| Auth | JWT (jjwt 0.13.0), BCrypt |
-| Banco de dados | PostgreSQL, Hibernate, Flyway |
-| Documentação | SpringDoc OpenAPI 3 (Swagger UI) |
-| Testes | JUnit 5, Mockito, Testcontainers |
-| Build | Maven (wrapper) |
-| Deploy | Docker (multi-stage), Render, Neon |
+Base local: `http://localhost:8080` · Documentação interativa: `/swagger-ui/index.html`
 
----
-
-## API
-
-**URL base:** `https://lifesync-api-ezkx.onrender.com`
-
-| Endpoint | Descrição |
-|---|---|
-| Swagger UI | `/swagger-ui/index.html` |
-| Health | `/actuator/health` |
-
-**Autenticação:** Todos os endpoints exceto `auth/*` exigem o header `Authorization: Bearer <access_token>`.
-
-### Endpoints
+Todos os endpoints exigem `Authorization: Bearer <access_token>`, exceto os de `/api/auth/*`.
 
 #### Auth
 
-| Método | Caminho | Descrição |
+| Método | Rota | Descrição |
 |---|---|---|
-| `POST` | `/api/auth/register` | Registra um novo usuário — retorna tokens de acesso e refresh |
+| `POST` | `/api/auth/register` | Registra um usuário e retorna access + refresh token |
 | `POST` | `/api/auth/login` | Autentica e retorna os tokens |
-| `POST` | `/api/auth/refresh` | Troca um refresh token por um novo access token |
+| `POST` | `/api/auth/refresh` | Troca um refresh token válido por um novo access token |
 
 #### User
 
-| Método | Caminho | Descrição |
+| Método | Rota | Descrição |
 |---|---|---|
 | `GET` | `/api/users/me` | Retorna o perfil do usuário autenticado |
-| `PUT` | `/api/users/me` | Atualiza o perfil (timezone, nome de exibição, etc.) |
+| `PUT` | `/api/users/me` | Atualiza o perfil (nome, timezone, etc.) |
 
 #### Task
 
-| Método | Caminho | Descrição |
+| Método | Rota | Descrição |
 |---|---|---|
-| `POST` | `/api/tasks` | Cria uma tarefa (opcional `goalId` para vincular a uma meta) |
-| `GET` | `/api/tasks/{id}` | Busca uma tarefa pelo ID |
-| `GET` | `/api/tasks` | Lista tarefas (filtro por `status`, `priority`; paginado) |
-| `PUT` | `/api/tasks/{id}` | Atualiza campos (título, descrição, prioridade, data de vencimento) |
-| `DELETE` | `/api/tasks/{id}` | Remove uma tarefa (em cascata para subtarefas) |
-| `PATCH` | `/api/tasks/{id}/status` | Atualiza apenas o status |
-| `POST` | `/api/tasks/{id}/subtasks` | Adiciona uma subtarefa |
-| `PUT` | `/api/tasks/{id}/subtasks/{subtaskId}` | Atualiza o título de uma subtarefa |
-| `PATCH` | `/api/tasks/{id}/subtasks/{subtaskId}` | Alterna a conclusão da subtarefa |
-| `DELETE` | `/api/tasks/{id}/subtasks/{subtaskId}` | Remove uma subtarefa |
+| `POST` | `/api/tasks` | Cria uma tarefa (`goalId` opcional) |
+| `GET` | `/api/tasks/{taskId}` | Busca uma tarefa por ID |
+| `GET` | `/api/tasks` | Lista tarefas (paginado, filtro por status/prioridade) |
+| `PUT` | `/api/tasks/{taskId}` | Atualiza campos da tarefa |
+| `DELETE` | `/api/tasks/{taskId}` | Remove a tarefa (cascata para subtarefas) |
+| `PATCH` | `/api/tasks/{taskId}/status` | Atualiza apenas o status |
+| `POST` | `/api/tasks/{taskId}/subtasks` | Adiciona uma subtarefa |
+| `PUT` | `/api/tasks/{taskId}/subtasks/{subtaskId}` | Atualiza o título de uma subtarefa |
+| `PATCH` | `/api/tasks/{taskId}/subtasks/{subtaskId}` | Alterna conclusão da subtarefa |
+| `DELETE` | `/api/tasks/{taskId}/subtasks/{subtaskId}` | Remove uma subtarefa |
 
 #### Habit
 
-| Método | Caminho | Descrição |
+| Método | Rota | Descrição |
 |---|---|---|
-| `POST` | `/api/habits` | Cria um hábito (com frequência e meta por período) |
-| `GET` | `/api/habits/{id}` | Busca um hábito pelo ID |
+| `POST` | `/api/habits` | Cria um hábito (frequência + meta por período) |
+| `GET` | `/api/habits/{habitId}` | Busca um hábito por ID |
 | `GET` | `/api/habits` | Lista hábitos (paginado) |
-| `PUT` | `/api/habits/{id}` | Atualiza campos do hábito |
-| `DELETE` | `/api/habits/{id}` | Soft delete (preserva o histórico de check-ins) |
-| `POST` | `/api/habits/{id}/checkin` | Registra check-in de hoje (409 se já feito) |
-| `GET` | `/api/habits/{id}/history` | Histórico de check-ins (paginado) |
+| `PUT` | `/api/habits/{habitId}` | Atualiza campos do hábito |
+| `DELETE` | `/api/habits/{habitId}` | Soft delete (histórico é preservado) |
+| `POST` | `/api/habits/{habitId}/checkin` | Registra o check-in de hoje |
+| `GET` | `/api/habits/{habitId}/history` | Histórico de check-ins (paginado) |
 
 #### Goal
 
-| Método | Caminho | Descrição |
+| Método | Rota | Descrição |
 |---|---|---|
 | `POST` | `/api/goals` | Cria uma meta com valor alvo e unidade |
-| `GET` | `/api/goals/{id}` | Busca uma meta pelo ID |
-| `GET` | `/api/goals` | Lista metas (filtro por `status`; paginado) |
-| `PUT` | `/api/goals/{id}` | Atualiza campos da meta |
-| `DELETE` | `/api/goals/{id}` | Remove uma meta (desvincula tasks/habits, deleta histórico de progresso) |
-| `POST` | `/api/goals/{id}/progress` | Registra progresso (valor absoluto, transição automática para `COMPLETED`) |
-| `GET` | `/api/goals/{id}/progress` | Histórico de progresso |
+| `GET` | `/api/goals/{goalId}` | Busca uma meta por ID |
+| `GET` | `/api/goals` | Lista metas (paginado, filtro por status) |
+| `PUT` | `/api/goals/{goalId}` | Atualiza campos da meta |
+| `DELETE` | `/api/goals/{goalId}` | Remove a meta (desvincula tasks/habits, apaga histórico) |
+| `POST` | `/api/goals/{goalId}/progress` | Registra progresso (valor absoluto) |
+| `GET` | `/api/goals/{goalId}/progress` | Histórico de progresso |
 
 ---
 
-## Guia de desenvolvimento
+## Como rodar localmente
 
 ### Pré-requisitos
 
-- **JDK 21+** (Temurin recomendado)
-- **Docker** (para testes de integração com Testcontainers)
-- **PostgreSQL 16+** (para desenvolvimento local sem Testcontainers)
+- JDK 21+
+- Docker (necessário para os testes de integração via Testcontainers)
+- PostgreSQL 16+ (opcional, só se não quiser usar Testcontainers)
 
-### Setup local
+### Passos
 
 ```bash
 git clone https://github.com/EndriwEngSoft/lifesync-api.git
 cd lifesync-api
 
-# Opção A: Com Testcontainers (requer Docker rodando)
-./mvnw clean test
-./mvnw spring-boot:run
-
-# Opção B: Com PostgreSQL local
-createdb lifesync_db
-./mvnw spring-boot:run
+./mvnw clean test          # roda a suíte completa (sobe Postgres via Testcontainers)
+./mvnw spring-boot:run      # inicia a aplicação em http://localhost:8080
 ```
 
-A aplicação inicia em `http://localhost:8080`.
+Sem nenhuma variável de ambiente configurada, a aplicação sobe com valores de fallback definidos em `application.yml` (banco local `lifesync_db`, senha `123456`, chave JWT de desenvolvimento). Esses fallbacks existem só para facilitar o setup local — em produção o perfil `prod` exige que tudo venha do ambiente (`application-prod.yml`).
 
-Para desenvolvimento local, o `application.yml` fornece valores de fallback para `DB_PASSWORD` e `JWT_SECRET`, permitindo rodar sem variáveis de ambiente. **Esses fallbacks são para desenvolvimento apenas** — em produção, sempre se lê do ambiente (veja `application-prod.yml`).
+---
 
-### Variáveis de ambiente
+## Variáveis de ambiente
 
-| Variável | Padrão (dev) | Produção | Descrição |
-|---|---|---|---|
-| `DB_PASSWORD` | `123456` | (definida pela plataforma) | Senha do PostgreSQL |
-| `JWT_SECRET` | chave de desenvolvimento | (definida pela plataforma) | Chave de assinatura HMAC-SHA256 (mínimo 256 bits) |
-| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:5173` | (definida pela plataforma) | Origens CORS permitidas |
-| `SPRING_DATASOURCE_URL` | — | (definida pela plataforma) | URL JDBC do PostgreSQL |
-| `SPRING_DATASOURCE_USERNAME` | — | (definida pela plataforma) | Usuário do banco |
-| `JWT_EXPIRATION` | `86400000` (24h) | (herdado) | TTL do access token (ms) |
-| `JWT_REFRESH_EXPIRATION` | `604800000` (7 dias) | (herdado) | TTL do refresh token (ms) |
+| Variável | Fallback (dev) | Descrição |
+|---|---|---|
+| `DB_PASSWORD` | `123456` | Senha do PostgreSQL |
+| `JWT_SECRET` | chave de dev embutida | Chave HMAC-SHA256 para assinatura dos tokens (mínimo 256 bits / 32 caracteres) |
+| `JWT_EXPIRATION` | `86400000` (24h) | TTL do access token, em ms |
+| `JWT_REFRESH_EXPIRATION` | `604800000` (7 dias) | TTL do refresh token, em ms |
+| `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Origens permitidas no CORS |
+| `SPRING_DATASOURCE_URL` | `jdbc:postgresql://localhost:5432/lifesync_db` | URL JDBC do banco |
+| `SPRING_DATASOURCE_USERNAME` | `postgres` | Usuário do banco |
+| `PORT` | `8080` | Porta HTTP (injetada automaticamente por plataformas de deploy) |
 
 ---
 
 ## Testes
 
-A suíte de testes distinguir entre **testes unitários** (Mockito, sem banco) e **testes de integração** (Testcontainers, PostgreSQL real no Docker).
+**34 testes**, todos passando — combinando testes unitários (Mockito, sem banco) e um teste de integração (Testcontainers, PostgreSQL real).
 
-### Comandos
-
-```bash
-# Suite completa (unitários + integração)
-./mvnw clean test
-
-# Apenas testes unitários (mais rápido, sem Docker)
-./mvnw clean test -Dtest="*ServiceTest,AuthControllerTest"
-
-# Teste de integração com PostgreSQL real
-./mvnw clean test -Dtest="LifesyncApiApplicationTests"
-```
-
-### Contagem de testes
-
-**34 testes** no total (unitários + integração), todos passando.
-
-| Arquivo | Tipo | Testes |
+| Classe | Tipo | Qtde. |
 |---|---|---|
-| `AuthControllerTest` | Unitário (MockMvc) | 3 |
 | `TaskServiceTest` | Unitário (Mockito) | 7 |
 | `HabitServiceTest` | Unitário (Mockito) | 6 |
+| `JwtTokenProviderTest` | Unitário (puro) | 6 |
 | `GoalServiceTest` | Unitário (Mockito) | 5 |
 | `UserServiceTest` | Unitário (Mockito) | 4 |
-| `JwtTokenProviderTest` | Unitário (puro) | 6 |
-| `JwtAuthFilterTest` | Unitário (puro) | 1 |
+| `AuthControllerTest` | Unitário (MockMvc) | 3 |
 | `LifesyncApiApplicationTests` | Integração (Testcontainers) | 2 |
+| `JwtAuthFilterTest` | Unitário (puro) | 1 |
 
-O teste de integração (`LifesyncApiApplicationTests`) inicia o contexto Spring completo com uma instância PostgreSQL gerenciada pelo Testcontainers, executa migrações Flyway de `V1` a `V2` e valida o esquema.
+```bash
+./mvnw clean test
+```
+
+O teste de integração sobe o contexto Spring completo com um container PostgreSQL real, executa as migrações Flyway (`V1` → `V2`) e valida o schema resultante.
 
 ---
 
 ## Deploy
 
-### Stack de produção
+**Stack de produção:** Render (Web Service, plano free, `runtime: docker`) + Neon (PostgreSQL serverless).
 
-- **Render** (Web Service gratuito) — executa a imagem Docker com `runtime: docker`
-- **Neon** (PostgreSQL Serverless gratuito) — banco gerenciado com escala automática
-
-### CI/CD
-
-Todo *push* para `main` (ou *pull request*) dispara o pipeline do GitHub Actions:
-
-```yaml
-# .github/workflows/ci.yml
-```
-
-O pipeline executa `./mvnw -B clean test` em `ubuntu-latest`, que já inclui Docker por padrão — os Testcontainers funcionam no CI sem configuração adicional.
-
-### Docker
-
-Build multi-estágio:
+### Docker (build multi-stage)
 
 ```dockerfile
-# Build stage
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 COPY pom.xml .
 COPY src ./src
 RUN mvn -B clean package -Dmaven.test.skip=true
 
-# Runtime stage
 FROM eclipse-temurin:21-jre-alpine
 VOLUME /tmp
 COPY --from=build /app/target/lifesync-api.jar app.jar
 ENTRYPOINT ["java", "-Xmx400m", "-jar", "/app.jar"]
 ```
 
-O flag `-Xmx400m` é intencional: o plano gratuito do Render oferece 512MB de RAM, e reservar ~110MB para o SO previne `OutOfMemoryError`.
+O `-Xmx400m` é proposital: o plano gratuito do Render dá 512MB de RAM, e reservar margem para o SO evita `OutOfMemoryError`.
 
-### Deploy via Render Blueprint
+### CI/CD
 
-1. **Criar banco de dados no Neon** — crie um projeto e copie os dados de conexão.
-2. **Gerar `JWT_SECRET`** (PowerShell):
+`.github/workflows/ci.yml` roda em todo push/PR para `main`: sobe JDK 21, dá permissão de execução ao `mvnw` e executa `./mvnw -B clean test` em `ubuntu-latest` — que já vem com Docker, então os Testcontainers funcionam sem configuração extra.
 
-   ```powershell
-   $b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Fill($b); [Convert]::ToBase64String($b)
-   ```
+### Infraestrutura como código
 
-3. **Fazer push para o GitHub** — o Render lê `render.yaml` do branch `main` automaticamente.
-4. **Criar Blueprint no Render** — selecione seu repositório; o Render provisionará o serviço usando `render.yaml`.
-5. **Preencher variáveis de ambiente** (marcadas como `sync: false` no `render.yaml`):
-
-   | Variável | Valor |
-   |---|---|
-   | `SPRING_DATASOURCE_URL` | `jdbc:postgresql://<host>.neon.tech/<db>?sslmode=require` |
-   | `SPRING_DATASOURCE_USERNAME` | Usuário do Neon |
-   | `DB_PASSWORD` | Senha do Neon |
-   | `JWT_SECRET` | Gerado no passo 2 |
-   | `APP_CORS_ALLOWED_ORIGINS` | URL do seu frontend (ex: `https://seu-app.vercel.app`) |
-
-6. **Validar** na ordem:
-   - `https://<seu-servico>.onrender.com/actuator/health` → `{"status":"UP"}`
-   - `/swagger-ui/index.html` → renderiza
-   - `POST /api/auth/register` → retorna tokens
-   - `POST /api/auth/login` → retorna tokens
-   - Use o access token via "Authorize" no Swagger, então teste `GET /api/tasks`
-
-> **Cold start:** O plano gratuito do Render entra em hibernação após 15 minutos de inatividade. A primeira requisição após a hibernação leva ~60 segundos. Considere usar o [UptimeRobot](https://uptimerobot.com/) fazendo ping no `/actuator/health` a cada 10 minutos para manter o serviço ativo.
-
-### Erros comuns de deploy
-
-| Sintoma | Causa | Solução |
-|---|---|---|
-| `502` / app não inicia | `SPRING_DATASOURCE_URL` faltando `?sslmode=require` | Adicione `?sslmode=require` ao final da URL |
-| `401` em todos os endpoints | `JWT_SECRET` com menos de 32 caracteres (256 bits) | Gere uma chave de 32+ bytes |
-| CORS bloqueando o frontend | `APP_CORS_ALLOWED_ORIGINS` não inclui a URL do frontend | Adicione a URL exata no painel do Render |
-
----
-
-## Contribuição
-
-Contribuições são bem-vindas! Sinta-se à vonto para abrir uma *issue* ou enviar um *pull request*.
-
-### Passos para contribuir
-
-1. Faça um *fork* do repositório.
-2. Crie uma *branch* para sua feature: `git checkout -b feat/minha-feature`.
-3. Instale as dependências e rode os testes: `./mvnw clean test`.
-4. Commit suas alterações: `git commit -m "feat: minha feature"`.
-5. Faça *push* e abra um *pull request*.
-
-### Convenções
-
-- Use commits semânticos: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`.
-- Mantenha os testes atualizados — features sem cobertura não serão aceitas.
-- Siga o padrão de pacotes por domínio (`auth`, `user`, `task`, `habit`, `goal`).
-- Valide migrações Flyway localmente antes de enviar.
+O deploy no Render é guiado por `render.yaml` (Blueprint), que define o serviço, o health check (`/actuator/health`) e as variáveis de ambiente sensíveis como `sync: false` (preenchidas manualmente no painel).
 
 ---
 
 ## Licença
 
-Este projeto está licenciado sob a licença MIT — veja o arquivo [LICENSE](LICENSE) para o texto completo.
+Distribuído sob a licença MIT. Veja [LICENSE](LICENSE) para o texto completo.
 
 ---
 
 ## Autor
 
-**Endriw Bento** — estudante de Engenharia de Software na Estácio (2024–2028), focado em backend Java/Spring Boot.
+**Endriw Bento** — estudante de Engenharia de Software (Estácio, 2024–2028), focado em backend Java/Spring Boot.
 
-- **GitHub:** [github.com/EndriwEngSoft](https://github.com/EndriwEngSoft)
-- **Portfólio:** [endriwdev.vercel.app](https://endriwdev.vercel.app/)
-- **E-mail:** [endriwbento@gmail.com](mailto:endriwbento@gmail.com)
-
----
-
-## Sobre
-
-API para organização pessoal e produtividade: tarefas, hábitos e metas. Java 21 · Spring Boot 4.1 · Spring Security · JPA · PostgreSQL. (Em desenvolvimento)
+- GitHub: [github.com/EndriwEngSoft](https://github.com/EndriwEngSoft)
+- Portfólio: [endriwdev.vercel.app](https://endriwdev.vercel.app/)
