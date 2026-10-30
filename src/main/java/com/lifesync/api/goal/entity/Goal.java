@@ -9,6 +9,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -84,4 +85,19 @@ public class Goal extends BaseEntity {
     @Builder.Default
     private List<GoalProgress> progressHistory = new ArrayList<>();
 
+    /**
+     * Calcula a porcentagem de progresso em relação ao alvo.
+     *
+     * @return porcentagem de 0 a 100 (capeada em 100 quando currentValue > targetValue)
+     * @throws ArithmeticException se targetValue for zero (divisão por zero)
+     */
+    public BigDecimal getProgressPercentage() {
+        if (targetValue.compareTo(BigDecimal.ZERO) == 0) {
+            throw new ArithmeticException("targetValue não pode ser zero para calcular porcentagem");
+        }
+        BigDecimal percentage = currentValue
+                .divide(targetValue, 10, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100));
+        return percentage.min(BigDecimal.valueOf(100));
+    }
 }
