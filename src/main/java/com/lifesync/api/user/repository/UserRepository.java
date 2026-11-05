@@ -17,6 +17,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findByEmail(String email);
 
     /**
+     * Checagem de username duplicado no cadastro. No updateMe a checagem
+     * equivalente exclui o proprio usuario (existsByUsernameAndIdNot).
+     */
+    boolean existsByUsername(String username);
+
+    /**
      * "AndIdNot" exclui o proprio usuario da checagem - essencial pro
      * updateMe: sem isso, salvar o perfil sem mudar email/username
      * acusaria duplicidade contra si mesmo.
