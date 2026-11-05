@@ -40,6 +40,9 @@ public class UserService {
         if (userRepository.findByEmail(user.getEmail()).isPresent()) {
             throw new DuplicateResourceException("Email already exists.");
         }
+        if (userRepository.existsByUsername(user.getUsername())) {
+            throw new DuplicateResourceException("Username already exists.");
+        }
         user.setPasswordHash(passwordEncoder.encode(user.getPasswordHash()));
         return userRepository.save(user);
     }
