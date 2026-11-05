@@ -4,6 +4,9 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -34,6 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * garantir que erro do cliente (JSON quebrado, UUID invalido, rota
  * inexistente...) nao caia no catch-all e vire 500.
  */
+@ExtendWith(OutputCaptureExtension.class)
 class GlobalExceptionHandlerTest {
 
     private MockMvc mockMvc;
@@ -51,6 +56,19 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("Malformed or unreadable request body."));
+    }
+
+    /**
+     * A mensagem da exception e do parser JSON e pode carregar trecho do corpo
+     * enviado pelo cliente (dado do usuario); o log deve ter so o tipo.
+     */
+    @Test
+    void malformedJson_LogsOnlyTheExceptionType(CapturedOutput output) throws Exception {
+        mockMvc.perform(post("/fake/body").contentType(MediaType.APPLICATION_JSON).content("{nao e json"));
+
+        assertThat(output.getAll())
+                .contains("Malformed request body: HttpMessageNotReadableException")
+                .doesNotContain("JSON parse error");
     }
 
     @Test
