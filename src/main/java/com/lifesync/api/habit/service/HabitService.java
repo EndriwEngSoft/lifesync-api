@@ -20,6 +20,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -49,6 +50,7 @@ public class HabitService {
     private final HabitHistoryRepository habitHistoryRepository;
     private final GoalRepository goalRepository;
     private final UserService userService;
+    private final Clock clock;
 
     /**
      * Todo campo derivado de estado (currentStreak, longestStreak, active)
@@ -193,7 +195,7 @@ public class HabitService {
             throw new ResourceNotFoundException(HABIT_NOT_FOUND);
         }
 
-        LocalDate today = LocalDate.now(ZoneId.of(habit.getUser().getTimezone()));
+        LocalDate today = LocalDate.now(clock.withZone(ZoneId.of(habit.getUser().getTimezone())));
 
         if (habitHistoryRepository.existsByHabitIdAndCheckInDate(habitId, today)) {
             throw new DuplicateResourceException("Habit already checked in for today");
