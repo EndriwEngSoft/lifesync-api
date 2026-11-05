@@ -13,14 +13,18 @@ import com.lifesync.api.habit.repository.HabitHistoryRepository;
 import com.lifesync.api.habit.repository.HabitRepository;
 import com.lifesync.api.user.entity.User;
 import com.lifesync.api.user.service.UserService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -51,8 +55,17 @@ class HabitServiceTest {
     @Mock
     private UserService userService;
 
-    @InjectMocks
+    // Terca 2026-11-03 02:30 UTC = segunda 2026-11-02 23:30 em Sao Paulo (UTC-3).
+    // Data escolhida para provar que "hoje" vem do Clock E do fuso do usuario.
+    private static final Instant NOW = Instant.parse("2026-11-03T02:30:00Z");
+
     private HabitService habitService;
+
+    @BeforeEach
+    void setUp() {
+        Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
+        habitService = new HabitService(habitRepository, habitHistoryRepository, goalRepository, userService, fixedClock);
+    }
 
     @Test
     void checkIn_WhenInsertHitsUniqueConstraint_ThrowsDuplicateResourceException() {
@@ -87,6 +100,34 @@ class HabitServiceTest {
                 .saveAndFlush(any(HabitHistory.class));
 
         assertThrows(DuplicateResourceException.class, () -> habitService.checkIn(habitId, userId));
+    }
+
+    @Test
+    void checkIn_UsesClockAndUserTimezoneToDecideToday() {
+        UUID userId = UUID.randomUUID();
+        UUID habitId = UUID.randomUUID();
+
+        User user = User.builder().id(userId).timezone("America/Sao_Paulo").build();
+        Habit habit = Habit.builder()
+                .id(habitId)
+                .name("Ler")
+                .frequency(HabitFrequency.DAILY)
+                .active(true)
+                .user(user)
+                .build();
+
+        when(habitRepository.findByIdAndUserId(habitId, userId)).thenReturn(Optional.of(habit));
+        when(habitHistoryRepository.existsByHabitIdAndCheckInDate(any(), any())).thenReturn(false);
+        when(habitHistoryRepository.findTopByHabitIdAndCheckInDateBeforeOrderByCheckInDateDesc(any(), any()))
+                .thenReturn(Optional.empty());
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        habitService.checkIn(habitId, userId);
+
+        ArgumentCaptor<HabitHistory> saved = ArgumentCaptor.forClass(HabitHistory.class);
+        verify(habitHistoryRepository).saveAndFlush(saved.capture());
+        assertEquals(LocalDate.of(2026, 11, 2), saved.getValue().getCheckInDate(),
+                "02:30 UTC de terca ainda e segunda a noite em Sao Paulo");
     }
 
     @Test
