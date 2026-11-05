@@ -15,7 +15,7 @@ public class GeminiLlmClient implements LlmClient {
     private final RestClient restClient;
     private final AiProperties properties;
 
-    public GeminiLlmClient(AiProperties properties, RestClient.Builder builder) {
+    public GeminiLlmClient(AiProperties properties) {
         this.properties = properties;
         String apiKey = System.getenv("LLM_API_KEY");
 
@@ -24,9 +24,10 @@ public class GeminiLlmClient implements LlmClient {
             factory.setReadTimeout(properties.timeout());
         }
 
-        this.restClient = builder
+        // Instanciação direta e segura do RestClient sem depender do Builder externo
+        this.restClient = RestClient.builder()
                 .baseUrl(properties.baseUrl())
-                .defaultHeader("x-goog-api-key", apiKey)
+                .defaultHeader("x-goog-api-key", apiKey != null ? apiKey : "")
                 .defaultHeader("Content-Type", "application/json")
                 .requestFactory(factory)
                 .build();
@@ -34,17 +35,14 @@ public class GeminiLlmClient implements LlmClient {
 
     @Override
     public LlmResponse generatePlan(LlmRequest request) {
-        // 1. Prepara o payload específico do Gemini
         String fullPrompt = request.systemPrompt() + "\n\n<user_data>\n" + request.userContextJson() + "\n</user_data>";
         GeminiRequest geminiReq = new GeminiRequest(List.of(
                 new GeminiContent("user", List.of(new GeminiPart(fullPrompt)))
         ));
 
-        // 2. Inicia o cronómetro
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
 
-        // 3. Executa a chamada HTTP
         GeminiResponse response = restClient.post()
                 .uri("/v1beta/models/{model}:generateContent", properties.model())
                 .body(geminiReq)
@@ -62,7 +60,6 @@ public class GeminiLlmClient implements LlmClient {
 
         stopWatch.stop();
 
-        // 4. Mapeia a resposta de volta para o DTO neutro do nosso domínio
         if (response == null || response.candidates() == null || response.candidates().isEmpty()) {
             throw new RuntimeException("Resposta vazia ou inválida do provedor LLM.");
         }
