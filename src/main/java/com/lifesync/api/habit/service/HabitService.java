@@ -197,20 +197,29 @@ public class HabitService {
 
         LocalDate today = LocalDate.now(clock.withZone(ZoneId.of(habit.getUser().getTimezone())));
 
+        // Camada 1 de protecao contra duplicidade no mesmo dia
         if (habitHistoryRepository.existsByHabitIdAndCheckInDate(habitId, today)) {
             throw new DuplicateResourceException("Habit already checked in for today");
         }
 
+        // Busca o ultimo historico registrado ANTES de hoje
         HabitHistory previousHistory = habitHistoryRepository
                 .findTopByHabitIdAndCheckInDateBeforeOrderByCheckInDateDesc(habitId, today)
                 .orElse(null);
 
         int currentStreak;
         if (previousHistory == null) {
+            // Sem historico anterior, e o primeiro check-in
             currentStreak = 1;
+        } else if (isSamePeriod(habit, previousHistory.getCheckInDate(), today)) {
+            // Mesmo periodo (semana/mes): nao incrementa, mas o piso e 1 - apos trocar
+            // a frequencia o streak fica 0 e este check-in ja conta como o primeiro
+            currentStreak = Math.max(1, habit.getCurrentStreak());
         } else if (isConsecutiveCheckIn(habit, previousHistory.getCheckInDate(), today)) {
+            // Periodo imediatamente anterior: incrementa
             currentStreak = habit.getCurrentStreak() + 1;
         } else {
+            // Lacuna: quebra a sequencia e reinicia em 1
             currentStreak = 1;
         }
 
@@ -286,6 +295,18 @@ public class HabitService {
         LocalDate previousWeekStart = previousDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate currentWeekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         return previousWeekStart.plusWeeks(1).equals(currentWeekStart);
+    }
+
+    private boolean isSamePeriod(Habit habit, LocalDate previousDate, LocalDate today) {
+        return switch (habit.getFrequency()) {
+            case DAILY -> previousDate.equals(today);
+            case WEEKLY -> {
+                LocalDate previousWeekStart = previousDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                LocalDate currentWeekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                yield previousWeekStart.equals(currentWeekStart);
+            }
+            case MONTHLY -> YearMonth.from(previousDate).equals(YearMonth.from(today));
+        };
     }
 
 }
