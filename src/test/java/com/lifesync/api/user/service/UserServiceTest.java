@@ -19,6 +19,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -53,6 +55,45 @@ class UserServiceTest {
                 .timezone("America/Sao_Paulo")
                 .active(true)
                 .build();
+    }
+
+    @Test
+    void registerUser_WithDuplicateEmail_ThrowsAndDoesNotSave() {
+        when(userRepository.findByEmail("user@lifesync.com")).thenReturn(Optional.of(user));
+        User newUser = User.builder().name("Novo").username("novo").email("user@lifesync.com")
+                .passwordHash("senha123").build();
+
+        assertThrows(DuplicateResourceException.class, () -> userService.registerUser(newUser));
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void registerUser_WithDuplicateUsername_ThrowsAndDoesNotSave() {
+        when(userRepository.findByEmail("novo@lifesync.com")).thenReturn(Optional.empty());
+        when(userRepository.existsByUsername("usuario")).thenReturn(true);
+        User newUser = User.builder().name("Novo").username("usuario").email("novo@lifesync.com")
+                .passwordHash("senha123").build();
+
+        DuplicateResourceException exception =
+                assertThrows(DuplicateResourceException.class, () -> userService.registerUser(newUser));
+
+        assertEquals("Username already exists.", exception.getMessage());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void registerUser_WithFreeEmailAndUsername_HashesPasswordAndSaves() {
+        when(userRepository.findByEmail("novo@lifesync.com")).thenReturn(Optional.empty());
+        when(userRepository.existsByUsername("novo")).thenReturn(false);
+        when(passwordEncoder.encode("senha123")).thenReturn("hash-bcrypt");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        User newUser = User.builder().name("Novo").username("novo").email("novo@lifesync.com")
+                .passwordHash("senha123").build();
+
+        User saved = userService.registerUser(newUser);
+
+        assertEquals("hash-bcrypt", saved.getPasswordHash());
     }
 
     @Test

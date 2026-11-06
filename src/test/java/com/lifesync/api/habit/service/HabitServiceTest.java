@@ -13,14 +13,20 @@ import com.lifesync.api.habit.repository.HabitHistoryRepository;
 import com.lifesync.api.habit.repository.HabitRepository;
 import com.lifesync.api.user.entity.User;
 import com.lifesync.api.user.service.UserService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -51,8 +57,17 @@ class HabitServiceTest {
     @Mock
     private UserService userService;
 
-    @InjectMocks
+    // Terca 2026-11-03 02:30 UTC = segunda 2026-11-02 23:30 em Sao Paulo (UTC-3).
+    // Data escolhida para provar que "hoje" vem do Clock E do fuso do usuario.
+    private static final Instant NOW = Instant.parse("2026-11-03T02:30:00Z");
+
     private HabitService habitService;
+
+    @BeforeEach
+    void setUp() {
+        Clock fixedClock = Clock.fixed(NOW, ZoneOffset.UTC);
+        habitService = new HabitService(habitRepository, habitHistoryRepository, goalRepository, userService, fixedClock);
+    }
 
     @Test
     void checkIn_WhenInsertHitsUniqueConstraint_ThrowsDuplicateResourceException() {
@@ -87,6 +102,118 @@ class HabitServiceTest {
                 .saveAndFlush(any(HabitHistory.class));
 
         assertThrows(DuplicateResourceException.class, () -> habitService.checkIn(habitId, userId));
+    }
+
+    @Test
+    void checkIn_UsesClockAndUserTimezoneToDecideToday() {
+        UUID userId = UUID.randomUUID();
+        UUID habitId = UUID.randomUUID();
+
+        User user = User.builder().id(userId).timezone("America/Sao_Paulo").build();
+        Habit habit = Habit.builder()
+                .id(habitId)
+                .name("Ler")
+                .frequency(HabitFrequency.DAILY)
+                .active(true)
+                .user(user)
+                .build();
+
+        when(habitRepository.findByIdAndUserId(habitId, userId)).thenReturn(Optional.of(habit));
+        when(habitHistoryRepository.existsByHabitIdAndCheckInDate(any(), any())).thenReturn(false);
+        when(habitHistoryRepository.findTopByHabitIdAndCheckInDateBeforeOrderByCheckInDateDesc(any(), any()))
+                .thenReturn(Optional.empty());
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        habitService.checkIn(habitId, userId);
+
+        ArgumentCaptor<HabitHistory> saved = ArgumentCaptor.forClass(HabitHistory.class);
+        verify(habitHistoryRepository).saveAndFlush(saved.capture());
+        assertEquals(LocalDate.of(2026, 11, 2), saved.getValue().getCheckInDate(),
+                "02:30 UTC de terca ainda e segunda a noite em Sao Paulo");
+    }
+
+    // "Hoje" = quinta 2026-11-05. Semana atual: seg 11-02 a dom 11-08.
+    @ParameterizedTest(name = "{0}, streak {1}, ultimo check-in {2} -> {3}")
+    @CsvSource({
+            // diario
+            "DAILY,   3, 2026-11-04, 4",   // ontem: consecutivo
+            "DAILY,   3, 2026-11-02, 1",   // lacuna
+            // semanal
+            "WEEKLY,  2, 2026-10-30, 3",   // sexta da semana passada: consecutivo
+            "WEEKLY,  5, 2026-11-03, 5",   // mesma semana: mantem
+            "WEEKLY,  0, 2026-11-03, 1",   // mesma semana apos trocar a frequencia: piso 1
+            "WEEKLY,  4, 2026-10-20, 1",   // pulou semanas: lacuna
+            // mensal
+            "MONTHLY, 2, 2026-10-20, 3",   // mes passado: consecutivo
+            "MONTHLY, 4, 2026-11-01, 4",   // mesmo mes: mantem
+            "MONTHLY, 0, 2026-11-01, 1",   // mesmo mes apos trocar a frequencia: piso 1
+            "MONTHLY, 4, 2026-09-15, 1"    // pulou meses: lacuna
+    })
+    void checkIn_CalculatesStreakByFrequencyAndPreviousCheckIn(
+            HabitFrequency frequency, int streak, LocalDate previousCheckIn, int expectedStreak) {
+        Habit habit = habitWithStreak(frequency, streak);
+        stubCheckIn(habit, Optional.of(historyOn(previousCheckIn)));
+
+        HabitResponseDTO response = checkInOn(LocalDate.of(2026, 11, 5), habit);
+
+        assertEquals(expectedStreak, response.getCurrentStreak());
+    }
+
+    @Test
+    void checkIn_FirstCheckIn_StartsStreakAtOne() {
+        Habit habit = habitWithStreak(HabitFrequency.DAILY, 0);
+        stubCheckIn(habit, Optional.empty());
+
+        HabitResponseDTO response = checkInOn(LocalDate.of(2026, 11, 5), habit);
+
+        assertEquals(1, response.getCurrentStreak());
+        assertEquals(1, response.getLongestStreak());
+    }
+
+    @Test
+    void checkIn_WhenStreakGrows_UpdatesLongestStreak() {
+        Habit habit = habitWithStreak(HabitFrequency.DAILY, 3);
+        stubCheckIn(habit, Optional.of(historyOn(LocalDate.of(2026, 11, 4))));
+
+        HabitResponseDTO response = checkInOn(LocalDate.of(2026, 11, 5), habit);
+
+        assertEquals(4, response.getCurrentStreak());
+        assertEquals(4, response.getLongestStreak());
+    }
+
+    private Habit habitWithStreak(HabitFrequency frequency, int streak) {
+        User user = User.builder().id(UUID.randomUUID()).timezone("UTC").build();
+        return Habit.builder()
+                .id(UUID.randomUUID())
+                .name("Ler")
+                .frequency(frequency)
+                .currentStreak(streak)
+                .longestStreak(streak)
+                .active(true)
+                .user(user)
+                .build();
+    }
+
+    private HabitHistory historyOn(LocalDate date) {
+        HabitHistory history = new HabitHistory();
+        history.setCheckInDate(date);
+        return history;
+    }
+
+    private void stubCheckIn(Habit habit, Optional<HabitHistory> previous) {
+        when(habitRepository.findByIdAndUserId(habit.getId(), habit.getUser().getId())).thenReturn(Optional.of(habit));
+        when(habitHistoryRepository.existsByHabitIdAndCheckInDate(any(), any())).thenReturn(false);
+        when(habitHistoryRepository.findTopByHabitIdAndCheckInDateBeforeOrderByCheckInDateDesc(any(), any()))
+                .thenReturn(previous);
+        when(habitRepository.save(any(Habit.class))).thenAnswer(invocation -> invocation.getArgument(0));
+    }
+
+    /** Faz o check-in com o relogio fixado ao meio-dia UTC de {@code today} (usuario em UTC). */
+    private HabitResponseDTO checkInOn(LocalDate today, Habit habit) {
+        Clock clock = Clock.fixed(today.atTime(12, 0).toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+        HabitService service = new HabitService(
+                habitRepository, habitHistoryRepository, goalRepository, userService, clock);
+        return service.checkIn(habit.getId(), habit.getUser().getId());
     }
 
     @Test
