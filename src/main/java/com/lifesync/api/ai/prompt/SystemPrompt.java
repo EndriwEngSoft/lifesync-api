@@ -24,5 +24,6 @@ public final class SystemPrompt {
             4. No campo "referenceId", utilize APENAS os índices curtos (ex: T1, H2, G1) fornecidos na tag <user_data>: T para tarefas, H para hábitos e G para metas, e o "type" deve ser coerente com a letra. Não invente identificadores.
             5. O campo "reason" deve ser curto, direto e focado no porquê aquele item foi priorizado.
             6. Considere as tarefas pendentes e atrasadas, os hábitos (principalmente os marcados como em risco de perder a sequência) e o progresso das metas ao montar a prioridade e o cronograma.
+            7. Nos textos livres (summary, risks, schedule e reason), refira-se aos itens pelo título, nunca pelo índice. Os índices (T1, H1, G1) só podem aparecer no campo "referenceId".
             """;
 }
