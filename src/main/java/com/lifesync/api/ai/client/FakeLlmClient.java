@@ -1,10 +1,15 @@
 package com.lifesync.api.ai.client;
 
-import org.springframework.context.annotation.Primary;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
+/**
+ * Cliente de mentira, so ativo com lifesync.ai.provider=fake. Sem @Primary e sem
+ * condicao aberta: em producao ele nao existe, entao nunca responde no lugar do
+ * provedor real.
+ */
 @Component
-@Primary
+@ConditionalOnProperty(prefix = "lifesync.ai", name = "provider", havingValue = "fake")
 public class FakeLlmClient implements LlmClient {
 
     @Override

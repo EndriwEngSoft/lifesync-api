@@ -1,6 +1,7 @@
 package com.lifesync.api.ai.client;
 
 import com.lifesync.api.ai.config.AiProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -9,7 +10,9 @@ import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
+/** So ativo com lifesync.ai.provider=gemini. */
 @Service
+@ConditionalOnProperty(prefix = "lifesync.ai", name = "provider", havingValue = "gemini")
 public class GeminiLlmClient implements LlmClient {
 
     private final RestClient restClient;

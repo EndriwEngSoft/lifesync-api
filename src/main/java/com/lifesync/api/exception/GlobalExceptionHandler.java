@@ -1,5 +1,6 @@
 package com.lifesync.api.exception;
 
+import com.lifesync.api.ai.exception.AiDisabledException;
 import com.lifesync.api.common.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -225,6 +226,17 @@ public class GlobalExceptionHandler {
             DataIntegrityViolationException e, HttpServletRequest request) {
         log.warn("Data integrity violation: {}", e.getClass().getSimpleName());
         return buildResponse(HttpStatus.CONFLICT, "The request conflicts with existing data.", request);
+    }
+
+    /**
+     * Modulo de IA desligado por configuracao ou sem provedor: 503. Mensagem
+     * fixa, sem detalhe de configuracao.
+     */
+    @ExceptionHandler(AiDisabledException.class)
+    public ResponseEntity<ApiErrorResponse> handleAiDisabledException(
+            AiDisabledException e, HttpServletRequest request) {
+        log.warn("AI module unavailable: {}", e.getMessage());
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, "AI feature is currently unavailable.", request);
     }
 
     private ResponseEntity<ApiErrorResponse> buildResponse(HttpStatus status, String message,
