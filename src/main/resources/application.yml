@@ -77,7 +77,7 @@ lifesync:
     model: ${LIFESYNC_AI_MODEL:gemini-3.5-flash-lite}
     connect-timeout: 5s
     read-timeout: 30s
-    max-tokens: 2048
+    max-tokens: 4096
     daily-quota: 5
     max-attempts: 3
     retry-backoff: 500ms

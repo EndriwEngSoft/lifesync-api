@@ -21,6 +21,11 @@ public class GeminiRestClientConfig {
 
     @Bean(BEAN_NAME)
     public RestClient geminiRestClient(AiProperties properties) {
+        return builder(properties).build();
+    }
+
+    /** Builder ja configurado; exposto para os testes ligarem um servidor de mentira. */
+    public static RestClient.Builder builder(AiProperties properties) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(properties.connectTimeout())
                 .build();
@@ -30,7 +35,6 @@ public class GeminiRestClientConfig {
         return RestClient.builder()
                 .baseUrl(properties.baseUrl())
                 .defaultHeader("x-goog-api-key", properties.apiKey())
-                .requestFactory(factory)
-                .build();
+                .requestFactory(factory);
     }
 }

@@ -32,7 +32,7 @@ public record AiProperties(
         @DefaultValue("gemini-3.5-flash-lite") String model,
         @DefaultValue("5s") Duration connectTimeout,
         @DefaultValue("30s") Duration readTimeout,
-        @DefaultValue("2048") int maxTokens,
+        @DefaultValue("4096") int maxTokens,
         @DefaultValue("5") int dailyQuota,
         @DefaultValue("3") int maxAttempts,
         @DefaultValue("500ms") Duration retryBackoff

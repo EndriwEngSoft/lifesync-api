@@ -37,7 +37,7 @@ class AiPropertiesTest {
             assertThat(props.model()).isEqualTo("gemini-3.5-flash-lite");
             assertThat(props.connectTimeout()).isEqualTo(Duration.ofSeconds(5));
             assertThat(props.readTimeout()).isEqualTo(Duration.ofSeconds(30));
-            assertThat(props.maxTokens()).isEqualTo(2048);
+            assertThat(props.maxTokens()).isEqualTo(4096);
             assertThat(props.dailyQuota()).isEqualTo(5);
             assertThat(props.maxAttempts()).isEqualTo(3);
         });
