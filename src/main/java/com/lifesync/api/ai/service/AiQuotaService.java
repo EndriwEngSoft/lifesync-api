@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -31,8 +30,6 @@ import java.util.UUID;
  */
 @Service
 public class AiQuotaService {
-
-    private static final ZoneId FALLBACK_ZONE = ZoneId.of("UTC");
 
     private final AiRequestLogRepository logRepository;
     private final UserRepository userRepository;
@@ -68,10 +65,6 @@ public class AiQuotaService {
     private ZoneId zoneOf(UUID userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-        try {
-            return ZoneId.of(user.getTimezone());
-        } catch (DateTimeException | NullPointerException e) {
-            return FALLBACK_ZONE;
-        }
+        return UserZones.of(user);
     }
 }
