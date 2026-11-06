@@ -1,6 +1,7 @@
 package com.lifesync.api.ai.client;
 
 import com.lifesync.api.ai.config.AiProperties;
+import com.lifesync.api.ai.config.GeminiRestClientConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -21,8 +22,10 @@ class LlmClientSelectionTest {
     }
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
-            .withUserConfiguration(PropsConfig.class, FakeLlmClient.class, GeminiLlmClient.class)
-            .withPropertyValues("lifesync.ai.base-url=http://localhost:1", "lifesync.ai.model=teste");
+            .withUserConfiguration(PropsConfig.class, FakeLlmClient.class, GeminiLlmClient.class,
+                    GeminiRestClientConfig.class)
+            .withPropertyValues("lifesync.ai.base-url=http://localhost:1", "lifesync.ai.model=teste",
+                    "lifesync.ai.api-key=chave-so-de-teste");
 
     @Test
     void providerFake_RegistersOnlyFakeClient() {

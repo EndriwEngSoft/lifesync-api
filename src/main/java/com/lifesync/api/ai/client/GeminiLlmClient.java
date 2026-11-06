@@ -3,7 +3,6 @@ package com.lifesync.api.ai.client;
 import com.lifesync.api.ai.config.AiProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StopWatch;
 import org.springframework.web.client.RestClient;
@@ -18,22 +17,9 @@ public class GeminiLlmClient implements LlmClient {
     private final RestClient restClient;
     private final AiProperties properties;
 
-    public GeminiLlmClient(AiProperties properties) {
+    public GeminiLlmClient(AiProperties properties, RestClient geminiRestClient) {
         this.properties = properties;
-        String apiKey = System.getenv("LLM_API_KEY");
-
-        var factory = new JdkClientHttpRequestFactory();
-        if (properties.timeout() != null) {
-            factory.setReadTimeout(properties.timeout());
-        }
-
-        // Instanciação direta e segura do RestClient sem depender do Builder externo
-        this.restClient = RestClient.builder()
-                .baseUrl(properties.baseUrl())
-                .defaultHeader("x-goog-api-key", apiKey != null ? apiKey : "")
-                .defaultHeader("Content-Type", "application/json")
-                .requestFactory(factory)
-                .build();
+        this.restClient = geminiRestClient;
     }
 
     @Override

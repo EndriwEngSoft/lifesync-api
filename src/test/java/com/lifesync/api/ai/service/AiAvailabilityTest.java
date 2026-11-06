@@ -17,7 +17,8 @@ import static org.mockito.Mockito.when;
 class AiAvailabilityTest {
 
     private AiProperties props(boolean enabled) {
-        return new AiProperties(enabled, "fake", "http://localhost", "m", Duration.ofSeconds(5), 100);
+        return new AiProperties(enabled, "fake", "", "http://localhost", "m", Duration.ofSeconds(5),
+                Duration.ofSeconds(5), 100, 5, 3, Duration.ZERO);
     }
 
     @SuppressWarnings("unchecked")
