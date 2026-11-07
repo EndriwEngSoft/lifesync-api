@@ -10,6 +10,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,4 +40,11 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
                                         @Param("status") Status status,
                                         @Param("priority") Priority priority,
                                         Pageable pageable);
+
+    /**
+     * Tarefas do usuario com um dos status dados, limitadas pelo Pageable.
+     * Usada pelo modulo de IA para ler so as tarefas em aberto; sempre
+     * escopada pelo dono.
+     */
+    List<Task> findByUserIdAndStatusIn(UUID userId, Collection<Status> statuses, Pageable pageable);
 }

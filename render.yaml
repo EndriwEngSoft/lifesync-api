@@ -25,3 +25,12 @@ services:
         value: "604800000"
       - key: APP_CORS_ALLOWED_ORIGINS
         sync: false
+      # Modulo de IA: nasce desligado e sem provider. Para ligar, mude
+      # LIFESYNC_AI_ENABLED para "true" e LIFESYNC_AI_PROVIDER para "gemini".
+      - key: LIFESYNC_AI_ENABLED
+        value: "false"
+      - key: LIFESYNC_AI_PROVIDER
+        value: ""
+      # Chave do provedor: nunca no repositorio; preenchida no painel do Render.
+      - key: LLM_API_KEY
+        sync: false

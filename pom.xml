@@ -28,6 +28,10 @@
     </scm>
     <properties>
         <java.version>21</java.version>
+        <!-- Testes com a tag "live" chamam o provedor real: ficam fora da suite padrao e do CI.
+             Para roda-los: mvnw -Plive test -Dtest=WeeklyPlanLiveEvalTest -->
+        <test.groups></test.groups>
+        <test.excludedGroups>live</test.excludedGroups>
     </properties>
     <dependencies>
         <dependency>
@@ -150,6 +154,14 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <groups>${test.groups}</groups>
+                    <excludedGroups>${test.excludedGroups}</excludedGroups>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <executions>
                     <execution>
@@ -186,5 +198,16 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Avaliacao contra o provedor real (manual, nunca no CI). Roda SO os testes "live". -->
+        <profile>
+            <id>live</id>
+            <properties>
+                <test.groups>live</test.groups>
+                <test.excludedGroups>nenhum-grupo-excluido</test.excludedGroups>
+            </properties>
+        </profile>
+    </profiles>
 
 </project>

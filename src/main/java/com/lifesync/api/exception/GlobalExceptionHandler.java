@@ -1,5 +1,9 @@
 package com.lifesync.api.exception;
 
+import com.lifesync.api.ai.exception.AiDisabledException;
+import com.lifesync.api.ai.exception.AiQuotaExceededException;
+import com.lifesync.api.ai.exception.InvalidLlmOutputException;
+import com.lifesync.api.ai.exception.LlmProviderException;
 import com.lifesync.api.common.ApiErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -225,6 +229,52 @@ public class GlobalExceptionHandler {
             DataIntegrityViolationException e, HttpServletRequest request) {
         log.warn("Data integrity violation: {}", e.getClass().getSimpleName());
         return buildResponse(HttpStatus.CONFLICT, "The request conflicts with existing data.", request);
+    }
+
+    /**
+     * Modulo de IA desligado por configuracao ou sem provedor: 503. Mensagem
+     * fixa, sem detalhe de configuracao.
+     */
+    @ExceptionHandler(AiDisabledException.class)
+    public ResponseEntity<ApiErrorResponse> handleAiDisabledException(
+            AiDisabledException e, HttpServletRequest request) {
+        log.warn("AI module unavailable: {}", e.getMessage());
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, "AI feature is currently unavailable.", request);
+    }
+
+    /**
+     * Cota diaria de IA do usuario esgotada: 429. A mensagem e fixa (vem do
+     * proprio servico, sem dado de usuario).
+     */
+    @ExceptionHandler(AiQuotaExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleAiQuotaExceededException(
+            AiQuotaExceededException e, HttpServletRequest request) {
+        log.warn("AI quota exceeded");
+        return buildResponse(HttpStatus.TOO_MANY_REQUESTS, e.getMessage(), request);
+    }
+
+    /**
+     * Falha ao falar com o provedor de IA. Timeout vira 504; qualquer outro
+     * tipo (429/5xx do provedor, bloqueio, resposta vazia...) vira 502. So o
+     * tipo vai para o log e a mensagem ao cliente e generica: o detalhe do
+     * provedor nao e' repassado.
+     */
+    @ExceptionHandler(LlmProviderException.class)
+    public ResponseEntity<ApiErrorResponse> handleLlmProviderException(
+            LlmProviderException e, HttpServletRequest request) {
+        log.warn("AI provider failure: {}", e.getType());
+        if (e.getType() == LlmProviderException.Type.TIMEOUT) {
+            return buildResponse(HttpStatus.GATEWAY_TIMEOUT, "The AI provider took too long to respond.", request);
+        }
+        return buildResponse(HttpStatus.BAD_GATEWAY, "The AI provider is unavailable or returned an error.", request);
+    }
+
+    /** O provedor respondeu, mas a saida nao passou na validacao: 502. */
+    @ExceptionHandler(InvalidLlmOutputException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidLlmOutputException(
+            InvalidLlmOutputException e, HttpServletRequest request) {
+        log.warn("AI output rejected: {}", e.getMessage());
+        return buildResponse(HttpStatus.BAD_GATEWAY, "The AI provider returned an invalid response.", request);
     }
 
     private ResponseEntity<ApiErrorResponse> buildResponse(HttpStatus status, String message,
