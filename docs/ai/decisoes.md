@@ -49,6 +49,12 @@ Fluxo de uma chamada: módulo ligado? → cota diária → contexto minimizado �
 
 - **Decisão:** `FakeLlmClient` só é criado com `lifesync.ai.provider=fake`; `GeminiLlmClient`, só com `gemini`. Sem provider, nenhum cliente existe e o endpoint responde 503. Em produção o módulo nasce desligado e sem provider.
 
+### 8. Métricas só com números e enums
+
+- **Decisão:** o `AiMetrics` (Micrometer) registra a duração da chamada ao provedor (`lifesync.ai.request.duration`), as chamadas por status (`lifesync.ai.requests`), os tokens de entrada e de saída (`lifesync.ai.tokens`) e os pedidos barrados antes do provedor, por módulo desligado ou cota excedida (`lifesync.ai.rejections`). As únicas tags são valores de enum e o nome do provedor.
+- **Por quê:** a classe nem recebe o texto do prompt, a resposta, o id do usuário nem a chave, então eles não têm como chegar a uma métrica. Um teste percorre todas as métricas depois de chamadas com textos "secretos" e prova que nada disso aparece.
+- **Consequências:** as métricas são lidas em `/actuator/metrics`, que exige token. Erro do provedor não informa tokens, então nesses casos os contadores de tokens não são incrementados (não se inventa valor). O id do usuário não é tag por causa da cardinalidade e da privacidade.
+
 ## Aprendizados
 
 Registro do que deu errado ou surpreendeu durante a implementação e do que foi ajustado por causa disso.
@@ -75,7 +81,7 @@ Registro do que deu errado ou surpreendeu durante a implementação e do que foi
 
 ## Pendências e o que ainda não foi verificado
 
-- **Avaliação do plano gerado:** não há ainda uma avaliação com casos reais (taxa de saídas válidas, latência e tokens). Nenhuma chamada ao provedor real foi feita; os testes automatizados usam apenas servidores simulados e o cliente de mentira, e o CI nunca chama um LLM.
+- **Avaliação do plano gerado:** existem 10 casos e um teste que mede taxa de saídas válidas, latência e tokens (ver [avaliacao.md](avaliacao.md)), mas ele ainda não foi executado contra o provedor, então não há números. Nenhuma chamada ao provedor real foi feita; os testes automatizados usam apenas servidores simulados e o cliente de mentira, e o CI nunca chama um LLM.
 - **Camada do provedor em produção:** decisão em aberto (ADR 0002, seção 6).
 - **Limites numéricos da camada gratuita e retenção de logs na camada paga:** não verificados (ADR 0002).
-- **Métricas (duração, tokens) em Micrometer:** ainda não implementadas.
+- **Painel ou alerta sobre as métricas:** as métricas existem, mas não há exportador nem alerta configurados.

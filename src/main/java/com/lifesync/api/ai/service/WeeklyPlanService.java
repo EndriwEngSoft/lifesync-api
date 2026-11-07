@@ -11,8 +11,12 @@ import com.lifesync.api.ai.dto.WeeklyPlanResponseDTO;
 import com.lifesync.api.ai.dto.WeeklyPlanResponseDTO.PrioritizedItemDTO;
 import com.lifesync.api.ai.enums.AiFeature;
 import com.lifesync.api.ai.enums.AiRequestStatus;
+import com.lifesync.api.ai.exception.AiDisabledException;
+import com.lifesync.api.ai.exception.AiQuotaExceededException;
 import com.lifesync.api.ai.exception.InvalidLlmOutputException;
 import com.lifesync.api.ai.exception.LlmProviderException;
+import com.lifesync.api.ai.metrics.AiMetrics;
+import com.lifesync.api.ai.metrics.AiMetrics.Rejection;
 import com.lifesync.api.ai.prompt.SystemPrompt;
 import com.lifesync.api.ai.prompt.WeeklyPlanSchema;
 import com.lifesync.api.ai.service.ContextBuilder.BuiltContext;
@@ -69,10 +73,13 @@ public class WeeklyPlanService {
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
     private final Validator validator;
+    private final AiMetrics metrics;
 
     public WeeklyPlanService(AiAvailability availability, AiQuotaService quotaService,
                              ContextBuilder contextBuilder, AiRequestLogService logService,
-                             AiProperties properties, ObjectMapper objectMapper, Validator validator) {
+                             AiProperties properties, ObjectMapper objectMapper, Validator validator,
+                             AiMetrics metrics) {
+        this.metrics = metrics;
         this.availability = availability;
         this.quotaService = quotaService;
         this.contextBuilder = contextBuilder;
@@ -83,8 +90,19 @@ public class WeeklyPlanService {
     }
 
     public WeeklyPlanResponseDTO generate(UUID userId) {
-        LlmClient client = availability.requireClient();          // 503 se desligado
-        quotaService.assertWithinQuota(userId, AiFeature.WEEKLY_PLAN); // 429 se acabou a cota
+        LlmClient client;
+        try {
+            client = availability.requireClient();                    // 503 se desligado
+        } catch (AiDisabledException e) {
+            metrics.recordRejection(AiFeature.WEEKLY_PLAN, Rejection.DISABLED);
+            throw e;
+        }
+        try {
+            quotaService.assertWithinQuota(userId, AiFeature.WEEKLY_PLAN); // 429 se acabou a cota
+        } catch (AiQuotaExceededException e) {
+            metrics.recordRejection(AiFeature.WEEKLY_PLAN, Rejection.QUOTA_EXCEEDED);
+            throw e;
+        }
 
         BuiltContext built = contextBuilder.build(userId);
         if (built.context().isEmpty()) {
@@ -209,6 +227,9 @@ public class WeeklyPlanService {
 
     private void record(UUID userId, String model, int inputTokens, int outputTokens, long latencyMs,
                         AiRequestStatus status) {
+        // Metricas primeiro: a chamada ao provedor aconteceu (e custou) mesmo que a gravacao do log falhe.
+        // So enums, numeros e o nome do provedor: nunca prompt, resposta ou chave.
+        metrics.recordCall(AiFeature.WEEKLY_PLAN, properties.provider(), status, latencyMs, inputTokens, outputTokens);
         logService.record(userId, AiFeature.WEEKLY_PLAN, SystemPrompt.PROMPT_VERSION, properties.provider(),
                 model, inputTokens, outputTokens, latencyMs, status);
         log.info("AI call finished: feature={}, status={}, latencyMs={}", AiFeature.WEEKLY_PLAN, status, latencyMs);
