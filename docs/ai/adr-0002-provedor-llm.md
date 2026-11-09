@@ -1,6 +1,6 @@
 # ADR 0002: Provedor de LLM (Gemini) e camada de uso
 
-- **Status:** aceito, com uma decisão em aberto (camada de uso em produção, seção 6)
+- **Status:** aceito; camada de uso em produção decidida em 2026-11-09 (seção 6)
 - **Data da verificação das fontes:** 2026-11-06
 - **Verificação por execução contra o provedor:** 2026-11-09 (seção 6)
 
@@ -50,13 +50,18 @@ Usar o **Gemini** por REST, pelo adaptador `GeminiLlmClient`, com a configuraç�
 
 * **A camada gratuita não é adequada para dados reais de usuários.** Os próprios termos desaconselham enviar informação pessoal, e o conteúdo pode ser lido por revisores e usado para melhorar produtos. Com a camada gratuita, o módulo só deve ser usado com dados sintéticos ou de quem consentiu de forma explícita.
 * A minimização do contexto (sem nome, e-mail, ids e descrições; mascaramento de e-mails, CPFs e números longos nos títulos; limite de tamanho e de quantidade) reduz o risco, mas **não o elimina**: títulos livres podem conter dados de terceiros (ver o [modelo de ameaças](modelo-ameacas.md)).
-* O módulo nasce desligado em produção (`LIFESYNC_AI_ENABLED=false`) e só liga com provedor e chave configurados.
+* O módulo nasce desligado em produção (`LIFESYNC_AI_ENABLED=false`) e só liga com provedor e chave configurados; mesmo ligado, só atende os usuários da lista de permitidos (seção 6).
 * Os limites do provedor valem por projeto e são compartilhados por todos os usuários da aplicação. Por isso o módulo tem cota própria por usuário (`lifesync.ai.daily-quota`) e responde 502 ao cliente quando o provedor devolve 429.
 * Mudanças de modelo (descontinuações) exigem apenas alterar a configuração, mas a qualidade do plano com outro modelo precisa ser reavaliada.
 
-## 6. Decisão em aberto e itens não verificados
+## 6. Camada de uso em produção e itens não verificados
 
-* **Em aberto (cabe ao mantenedor):** qual camada usar em produção. Para usuários reais, a opção coerente com a política de dados é a camada paga (faturamento ativado), com custo e prazo de retenção de logs a avaliar; a alternativa é manter o módulo desligado ou restrito a contas de demonstração.
+* **Decisão (2026-11-09): camada gratuita, restrita a uma conta de demonstração por lista de permitidos.** O módulo só atende os usuários cujos ids estão em `LIFESYNC_AI_ALLOWED_USERS`; para todos os outros a rota responde o mesmo 503 do módulo desligado, sem chamar o provedor nem gravar log. A lista vazia significa ninguém, e um id inválido derruba a subida da aplicação.
+  * **Motivo:** os termos da camada gratuita permitem que o conteúdo seja lido por revisores e usado para melhorar produtos, e desaconselham enviar informação pessoal. O mascaramento dos títulos é de melhor esforço. A única forma de garantir que nenhum dado de usuário real saia é garantir quem pode chamar: uma conta mantida pelo autor, só com dados sintéticos. A lista fecha o risco por construção, em vez de depender de um aviso ao usuário.
+  * **Opções descartadas:** manter tudo desligado (não permite demonstrar o módulo em produção); camada paga para todos (exige faturamento, e o prazo de retenção e o preço não foram verificados); camada gratuita para todos com consentimento (quem aparece no título de outra pessoa não consentiu).
+  * **Limites da decisão:** a garantia depende de a conta permitida só ter dados sintéticos, o que é disciplina de quem a mantém, não algo que o código verifique. O curinga `*` (qualquer usuário) existe para desenvolvimento e testes com o provedor de mentira e não deve ser usado com o provedor real. O limite de uso da camada gratuita é por projeto.
+  * **Estado:** a lista está implementada e testada; o `render.yaml` continua com o módulo desligado e sem valor para a lista. Ligar em produção exige definir, no painel, `LIFESYNC_AI_ENABLED`, `LIFESYNC_AI_PROVIDER`, `LLM_API_KEY` e `LIFESYNC_AI_ALLOWED_USERS`; isso ainda não foi feito.
+  * **Quando reavaliar:** se o módulo for aberto a usuários reais, a camada paga volta a ser o caminho, com retenção e custo verificados antes.
 * **Verificado por execução em 2026-11-09** (camada gratuita, só dados sintéticos; números em [decisoes.md](decisoes.md)):
   * o modelo `gemini-3.5-flash-lite` existe e aceita `generateContent` (consulta a `GET /v1beta/models/gemini-3.5-flash-lite`);
   * `generationConfig.responseJsonSchema` com tipos em minúsculas (`object`, `array`, `string`), `enum` e `required` é aceito pelo `generateContent`: 19 chamadas, nenhuma rejeitada com HTTP 400. A documentação continua sem um exemplo desse campo para esse endpoint: a página de saída estruturada descreve a Interactions API, e a referência do `generateContent` lista o campo sem detalhar o formato (consultadas de novo em 2026-11-09);

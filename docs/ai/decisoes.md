@@ -6,7 +6,7 @@
 
 O módulo de IA gera um **plano semanal** para o usuário a partir das tarefas, hábitos e metas dele, usando um modelo de linguagem (LLM). Cada usuário envia ao modelo apenas os próprios dados, minimizados. O endpoint é `POST /api/ai/weekly-plan`.
 
-Fluxo de uma chamada: módulo ligado? → cota diária → contexto minimizado → (sem dados: devolve plano vazio, sem chamar o modelo) → chamada ao modelo → validação da saída → troca dos índices curtos pelos ids reais → registro da chamada.
+Fluxo de uma chamada: módulo ligado? → usuário na lista de permitidos? → cota diária → contexto minimizado → (sem dados: devolve plano vazio, sem chamar o modelo) → chamada ao modelo → validação da saída → troca dos índices curtos pelos ids reais → registro da chamada.
 
 ## Decisões
 
@@ -47,7 +47,7 @@ Fluxo de uma chamada: módulo ligado? → cota diária → contexto minimizado �
 
 ### 7. Falhar fechado: o cliente de teste só existe se for pedido
 
-- **Decisão:** `FakeLlmClient` só é criado com `lifesync.ai.provider=fake`; `GeminiLlmClient`, só com `gemini`. Sem provider, nenhum cliente existe e o endpoint responde 503. Em produção o módulo nasce desligado e sem provider.
+- **Decisão:** `FakeLlmClient` só é criado com `lifesync.ai.provider=fake`; `GeminiLlmClient`, só com `gemini`. Sem provider, nenhum cliente existe e o endpoint responde 503. Em produção o módulo nasce desligado e sem provider. Mesmo ligado, ele só atende os usuários da lista de permitidos (`lifesync.ai.allowed-users`); a lista vazia significa ninguém, e quem está fora recebe o mesmo 503.
 
 ### 8. Métricas só com números e enums
 
@@ -110,7 +110,7 @@ Registro do que deu errado ou surpreendeu durante a implementação e do que foi
 
 - **Qualidade do plano:** a avaliação mede validade, latência e tokens (seção acima), não se o plano é útil. Não há critério automático de qualidade nem avaliação com dados de uso real.
 - **Uso em produção:** o módulo nunca rodou em produção nem pelo endpoint HTTP contra o provedor real; as chamadas reais foram feitas pelo teste de avaliação, que exercita o serviço completo. A suíte padrão e o CI continuam sem chamar um LLM.
-- **Camada do provedor em produção:** decisão em aberto (ADR 0002, seção 6).
+- **Ligar em produção:** a camada foi decidida (gratuita, só para a conta de demonstração da lista de permitidos; ADR 0002, seção 6), mas as variáveis ainda não foram definidas no painel e o módulo segue desligado.
 - **Limites numéricos da camada gratuita e retenção de logs na camada paga:** não verificados (ADR 0002). Com pausa de 10 s entre as chamadas, nenhuma das 19 chamadas feitas recebeu 429.
 - **Se os tokens de raciocínio contam dentro de `maxOutputTokens`:** não verificado. Nas chamadas feitas, a saída ficou entre 245 e 532 tokens, longe do teto de 4096.
 - **Falha ao gravar o log depois da chamada:** a exceção propaga e o cliente recebe 500, mesmo que o plano tenha sido gerado. É uma escolha (a contabilidade da cota importa mais que entregar um plano não registrado), mas não há nova tentativa de gravação.

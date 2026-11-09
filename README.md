@@ -201,7 +201,7 @@ Todos os endpoints exigem `Authorization: Bearer <access_token>`, exceto os de `
 
 `POST /api/ai/weekly-plan` lê as tarefas em aberto, os hábitos ativos e as metas em andamento do usuário do token, envia um resumo minimizado a um modelo de linguagem (Gemini) e devolve um plano semanal estruturado: resumo, prioridades, riscos e sugestões por dia. A resposta do modelo é tratada como entrada não confiável e só chega ao cliente depois de validada.
 
-**Estado:** o módulo está **desligado em produção** (a rota responde `503`). A decisão de ligá-lo depende da camada de uso do provedor, registrada como pendência no [ADR 0002](docs/ai/adr-0002-provedor-llm.md). Localmente ele roda com um provedor de mentira, sem chave e sem rede.
+**Estado:** o módulo está **desligado em produção** (a rota responde `503`). Quando ligado, ele só atende os usuários de uma lista de permitidos, pensada para uma conta de demonstração com dados sintéticos; o motivo está no [ADR 0002](docs/ai/adr-0002-provedor-llm.md). Localmente ele roda com um provedor de mentira, sem chave e sem rede.
 
 ### Fluxo de uma chamada
 
@@ -209,7 +209,9 @@ Todos os endpoints exigem `Authorization: Bearer <access_token>`, exceto os de `
 flowchart TD
     A[POST /api/ai/weekly-plan<br/>JWT: o usuário é o do token] --> B{Módulo ligado?}
     B -- não --> E503[503]
-    B -- sim --> C{Cota diária do usuário}
+    B -- sim --> P{Usuário na lista<br/>de permitidos?}
+    P -- não --> E503
+    P -- sim --> C{Cota diária do usuário}
     C -- esgotada --> E429[429]
     C -- ok --> D[ContextBuilder<br/>só dados do usuário, minimizados,<br/>itens por índice T1, H1, G1]
     D -- sem itens --> V[200 com plano vazio<br/>sem chamar o modelo]
@@ -229,6 +231,7 @@ flowchart TD
 - **O modelo nunca vê nem devolve ids reais.** Cada item vai com um índice curto (`T1`, `H1`, `G1`). O servidor guarda o mapa e só aceita índices que ele mesmo enviou, então um item inventado é rejeitado e é impossível apontar para o item de outro usuário.
 - **Saída do modelo é entrada não confiável.** O esquema JSON enviado ao provedor é só um guia; o servidor valida de novo (formato, tamanhos, tipo, índice existente). Saída inválida vira `502` e é registrada, em vez de ser "consertada": a taxa de saídas inválidas é a medida de qualidade do prompt.
 - **Falha fechada.** O cliente de mentira só existe com `lifesync.ai.provider=fake`; sem provider não há cliente algum e a rota responde `503`. Configuração incoerente (módulo ligado sem chave, por exemplo) derruba a subida da aplicação.
+- **Lista de permitidos.** Mesmo ligado, o módulo só atende os ids de usuário em `LIFESYNC_AI_ALLOWED_USERS`. Lista vazia significa ninguém, um id inválido derruba a subida, e quem está fora recebe o mesmo `503` do módulo desligado, sem chamada ao provedor nem registro.
 - **Cota diária calculada pelo próprio log**, no fuso do usuário, com um teto em 24 horas corridas que não depende do fuso (trocar o fuso do perfil não zera a contagem).
 - **Erros com dono.** `429` é a cota do usuário, `503` é o módulo desligado, `502` é o provedor que falhou ou devolveu algo inválido, `504` é o provedor que demorou. Só erros passageiros (429, 5xx e timeout do provedor) são repetidos, com espera crescente e número máximo de tentativas.
 
@@ -241,7 +244,7 @@ O porquê de cada uma, o que foi descartado e o que ainda não foi verificado es
 - **Prompt injection:** as instruções ficam em `systemInstruction`; os dados do usuário vão separados, dentro de `<user_data>`, com `<` e `>` escapados para o conteúdo não fechar a tag. Nenhuma defesa de prompt é completa, por isso a saída é validada e os ids são resolvidos no servidor.
 - **O log não guarda o texto do prompt nem da resposta**, só metadados (quem, quando, modelo, tokens, duração, status). As métricas só têm números e enums.
 - **Chave do provedor** só em variável de ambiente (`LLM_API_KEY`), enviada em header, nunca em URL, log ou `toString`.
-- **Política de dados do provedor:** na camada gratuita do Gemini o conteúdo pode ser usado para melhorar produtos e lido por revisores humanos. Por isso ela só foi usada com dados sintéticos, e o módulo fica desligado em produção ([ADR 0002](docs/ai/adr-0002-provedor-llm.md)).
+- **Política de dados do provedor:** na camada gratuita do Gemini o conteúdo pode ser usado para melhorar produtos e lido por revisores humanos. Por isso ela só foi usada com dados sintéticos, o módulo fica desligado em produção e, se for ligado, a lista de permitidos o restringe a uma conta de demonstração ([ADR 0002](docs/ai/adr-0002-provedor-llm.md)).
 
 Cada ameaça, com a mitigação, o estado e o risco que sobra, está no [modelo de ameaças](docs/ai/modelo-ameacas.md).
 
@@ -271,7 +274,7 @@ Resposta real do Gemini para um dos casos sintéticos da avaliação (um hábito
 
 ### Como rodar localmente com o provedor de mentira
 
-Sem o perfil `prod`, o `application.yml` já sobe o módulo ligado com `lifesync.ai.provider=fake`: nenhuma chamada de rede, nenhuma chave. Com a aplicação rodando (ver [Como rodar localmente](#como-rodar-localmente)):
+Sem o perfil `prod`, o `application.yml` já sobe o módulo ligado com `lifesync.ai.provider=fake` e a lista de permitidos aberta (`*`): nenhuma chamada de rede, nenhuma chave. Com a aplicação rodando (ver [Como rodar localmente](#como-rodar-localmente)):
 
 1. Registre um usuário em `POST /api/auth/register` e use o `accessToken`.
 2. Crie ao menos uma tarefa, um hábito ou uma meta (sem itens, a resposta é um plano vazio).
@@ -295,7 +298,7 @@ A rodada 1 foi reprovada por um falso positivo da própria checagem (o plano cit
 
 ## Testes
 
-**249 testes**, executados a cada push e pull request pelo CI (veja o badge no topo): 65 do núcleo (tabela abaixo) e 184 do módulo de IA. A maioria é unitária (Mockito, sem banco); os de integração sobem um PostgreSQL real com Testcontainers. Nenhum teste da suíte chama um LLM: o módulo de IA é testado com um servidor HTTP simulado e com o provedor de mentira.
+**260 testes**, executados a cada push e pull request pelo CI (veja o badge no topo): 65 do núcleo (tabela abaixo) e 195 do módulo de IA. A maioria é unitária (Mockito, sem banco); os de integração sobem um PostgreSQL real com Testcontainers. Nenhum teste da suíte chama um LLM: o módulo de IA é testado com um servidor HTTP simulado e com o provedor de mentira.
 
 | Classe | Tipo | Qtde. |
 |---|---|---|
@@ -318,7 +321,7 @@ O teste parametrizado do `HabitServiceTest` cobre as regras de streak por frequ�
 
 O teste de integração sobe o contexto Spring completo contra um container PostgreSQL, aplica as migrações Flyway (`V1` → `V3`) e, com `ddl-auto: validate`, falha se alguma entidade não bater com o schema.
 
-Os 184 testes do módulo de IA (`src/test/java/com/lifesync/api/ai`) cobrem, entre outros: o cliente do Gemini contra um servidor simulado (sucesso, 429, 5xx, timeout real, corpo malformado, bloqueio, resposta cortada), a validação da saída do modelo (JSON inválido, índice inventado, tipo incoerente), o contexto (só dados do usuário, saneamento e mascaramento dos títulos), a cota por fuso, o endpoint com JWT real (`401` sem token, usuário A nunca recebe item do B) e a varredura das métricas em busca de dados sensíveis.
+Os 195 testes do módulo de IA (`src/test/java/com/lifesync/api/ai`) cobrem, entre outros: a lista de permitidos (usuário fora dela recebe `503` sem chamada ao provedor), o cliente do Gemini contra um servidor simulado (sucesso, 429, 5xx, timeout real, corpo malformado, bloqueio, resposta cortada), a validação da saída do modelo (JSON inválido, índice inventado, tipo incoerente), o contexto (só dados do usuário, saneamento e mascaramento dos títulos), a cota por fuso, o endpoint com JWT real (`401` sem token, usuário A nunca recebe item do B) e a varredura das métricas em busca de dados sensíveis.
 
 ---
 
@@ -359,6 +362,7 @@ Sem variáveis de ambiente configuradas, a aplicação sobe com os valores de fa
 | `PORT` | `8080` | Porta HTTP (injetada automaticamente pelo Render) |
 | `LIFESYNC_AI_ENABLED` | `true` (dev) / `false` (prod) | Liga o módulo de IA; desligado, a rota responde `503` |
 | `LIFESYNC_AI_PROVIDER` | `fake` (dev) / vazio (prod) | `fake` (sem rede) ou `gemini`; vazio = nenhum cliente |
+| `LIFESYNC_AI_ALLOWED_USERS` | `*` (dev) / vazio (prod) | Ids (UUID) dos usuários que podem usar a IA, separados por vírgula; vazio = ninguém. O `*` é só para desenvolvimento com o provider `fake` |
 | `LLM_API_KEY` | (nenhum) | Chave do provedor; obrigatória só com o provider `gemini` |
 | `LIFESYNC_AI_MODEL` | `gemini-3.5-flash-lite` | Modelo usado pelo provider `gemini` |
 
