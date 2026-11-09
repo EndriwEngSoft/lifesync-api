@@ -528,6 +528,21 @@ class GeminiLlmClientTest {
     }
 
     @Test
+    void chat_IntegerLargerThanLongInTheArguments_IsHandedOverForValidationInsteadOfBlowingUp() {
+        respondOnce("""
+                {"candidates":[{"content":{"role":"model","parts":[
+                    {"functionCall":{"name":"tarefas_atrasadas","args":{"limite":99999999999999999999}}}]},
+                  "finishReason":"STOP"}]}
+                """);
+
+        LlmToolResponse response = client.chat(toolRequest(List.of()));
+
+        // Nao cabe em long: chega como BigInteger, que a validacao da ferramenta rejeita com erro tipado.
+        assertThat(response.toolCalls().getFirst().args().get("limite"))
+                .isEqualTo(new java.math.BigInteger("99999999999999999999"));
+    }
+
+    @Test
     void chat_BlockedEmptyAndTruncatedResponses() {
         respondOnce("{\"promptFeedback\":{\"blockReason\":\"SAFETY\"}}");
         assertChatFailsWith(Type.BLOCKED);

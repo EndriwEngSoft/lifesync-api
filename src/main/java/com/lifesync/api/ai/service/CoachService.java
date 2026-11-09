@@ -46,8 +46,9 @@ import java.util.regex.Pattern;
  *   e' rejeitada.
  *
  * Cada chamada ao modelo deixa uma linha de log so com metadados. Passos
- * intermediarios (TOOL_STEP) nao consomem cota; a resposta final ou a falha
- * de validacao consomem, entao a cota conta perguntas, nao passos.
+ * intermediarios (TOOL_STEP) nao consomem cota; a resposta final, a falha de
+ * validacao ou a interrupcao depois de um passo ja cobrado (INCOMPLETE)
+ * consomem, entao a cota conta perguntas, nao passos.
  *
  * Sem transacao: nao se segura uma conexao do banco durante chamadas de rede.
  */
@@ -124,6 +125,7 @@ public class CoachService {
 
         for (int step = 1; ; step++) {
             if (nanoTime.getAsLong() - start > totalTimeout.toNanos()) {
+                markIncompleteIfBilled(userId, history);
                 log.warn("Coach agent stopped: {}", Type.TIMEOUT);
                 throw new CoachAgentException(Type.TIMEOUT);
             }
@@ -137,6 +139,7 @@ public class CoachService {
                 AiRequestStatus status = e.getType() == LlmProviderException.Type.TIMEOUT
                         ? AiRequestStatus.TIMEOUT : AiRequestStatus.PROVIDER_ERROR;
                 record(userId, properties.model(), 0, 0, (nanoTime.getAsLong() - callStart) / 1_000_000, status);
+                markIncompleteIfBilled(userId, history);
                 throw e;
             }
 
@@ -204,10 +207,30 @@ public class CoachService {
         if (answer.isEmpty() || answer.length() > MAX_ANSWER_LENGTH) {
             throw new CoachAgentException(Type.INVALID_ANSWER);
         }
-        return IndexText.humanize(answer, IndexText.titlesByIndex(built.context()));
+        // A troca de indices por titulos pode aumentar o texto: o limite vale para o que sai, nao so para o que chega.
+        String humanized = IndexText.humanize(answer, IndexText.titlesByIndex(built.context()));
+        if (humanized.length() > MAX_ANSWER_LENGTH) {
+            throw new CoachAgentException(Type.INVALID_ANSWER);
+        }
+        return humanized;
     }
 
     // --- log e metricas: so metadados ---
+
+    /**
+     * Conversa interrompida (erro do provedor ou tempo) depois de pelo menos um
+     * passo ja cobrado: grava um marcador que consome cota. Sem ele, quem
+     * provocasse a interrupcao de proposito (um titulo que faz o provedor
+     * bloquear o segundo passo, por exemplo) repetiria chamadas reais de graca.
+     * Falha logo no primeiro passo nao cobra nada e continua sem consumir cota.
+     */
+    private void markIncompleteIfBilled(UUID userId, List<ToolExchange> history) {
+        if (history.isEmpty()) {
+            return;
+        }
+        logService.record(userId, AiFeature.COACH, CoachPrompt.PROMPT_VERSION, properties.provider(),
+                properties.model(), 0, 0, 0, AiRequestStatus.INCOMPLETE);
+    }
 
     private void record(UUID userId, LlmToolResponse response, AiRequestStatus status) {
         record(userId, response.modelName(), response.inputTokens(), response.outputTokens(),

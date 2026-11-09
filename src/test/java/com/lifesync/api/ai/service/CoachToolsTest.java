@@ -101,6 +101,8 @@ class CoachToolsTest {
         assertRejected(CoachTools.OVERDUE_TASKS, Map.of("limite", -1L), Type.INVALID_TOOL_ARGUMENTS);
         assertRejected(CoachTools.OVERDUE_TASKS, Map.of("limite", 21L), Type.INVALID_TOOL_ARGUMENTS);
         assertRejected(CoachTools.OVERDUE_TASKS, Map.of("limite", Long.MAX_VALUE), Type.INVALID_TOOL_ARGUMENTS);
+        assertRejected(CoachTools.OVERDUE_TASKS, Map.of("limite", new java.math.BigInteger("99999999999999999999")),
+                Type.INVALID_TOOL_ARGUMENTS);
         assertRejected(CoachTools.OVERDUE_TASKS, Map.of("limite", "5"), Type.INVALID_TOOL_ARGUMENTS);
         assertRejected(CoachTools.OVERDUE_TASKS, Map.of("limite", 5.5), Type.INVALID_TOOL_ARGUMENTS);
         assertRejected(CoachTools.OVERDUE_TASKS, Map.of("limite", true), Type.INVALID_TOOL_ARGUMENTS);

@@ -205,7 +205,9 @@ public class GeminiLlmClient implements LlmClient {
             return node.stringValue();
         }
         if (node.isIntegralNumber()) {
-            return node.longValue();
+            // Inteiro que nao cabe em long vira BigInteger: a validacao da ferramenta o rejeita com erro
+            // tipado, em vez de a conversao estourar aqui.
+            return node.canConvertToLong() ? (Object) node.longValue() : node.bigIntegerValue();
         }
         if (node.isNumber()) {
             return node.doubleValue();

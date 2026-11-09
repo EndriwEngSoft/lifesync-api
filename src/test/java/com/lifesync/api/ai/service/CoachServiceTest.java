@@ -275,6 +275,25 @@ class CoachServiceTest {
 
         verify(llmClient, times(1)).chat(any());
         verifyLogged(AiRequestStatus.TOOL_STEP, 1);
+        verifyLogged(AiRequestStatus.INCOMPLETE, 1); // o passo ja cobrado faz a pergunta consumir cota
+    }
+
+    @Test
+    void providerFailureAfterABilledStep_StillConsumesQuota() {
+        // Ex.: um titulo que so aparece no resultado da ferramenta faz o provedor bloquear o 2o passo.
+        LlmProviderException blocked = new LlmProviderException(LlmProviderException.Type.BLOCKED, "bloqueado");
+        when(llmClient.chat(any()))
+                .thenReturn(wantsTool(CoachTools.OVERDUE_TASKS, Map.of()))
+                .thenThrow(blocked);
+
+        assertThatThrownBy(() -> service.ask(userId, QUESTION)).isSameAs(blocked);
+
+        verifyLogged(AiRequestStatus.TOOL_STEP, 1);
+        verifyLogged(AiRequestStatus.PROVIDER_ERROR, 1);
+        verifyLogged(AiRequestStatus.INCOMPLETE, 1);
+        assertThat(AiRequestStatus.COUNTED_FOR_QUOTA)
+                .contains(AiRequestStatus.INCOMPLETE, AiRequestStatus.SUCCESS, AiRequestStatus.INVALID_OUTPUT)
+                .doesNotContain(AiRequestStatus.TOOL_STEP, AiRequestStatus.PROVIDER_ERROR, AiRequestStatus.TIMEOUT);
     }
 
     // --- prompt injection pelos titulos ---
@@ -330,6 +349,15 @@ class CoachServiceTest {
         verifyLogged(AiRequestStatus.SUCCESS, 0);
     }
 
+    @Test
+    void answerThatOnlyGetsTooLongAfterIndexesBecomeTitles_IsRejected() {
+        // Curta ao chegar (menos de 2000 caracteres), enorme depois que cada T1 vira o titulo da tarefa.
+        when(llmClient.chat(any())).thenReturn(answers("T1 ".repeat(600).trim()));
+
+        assertStopsWith(Type.INVALID_ANSWER);
+        verifyLogged(AiRequestStatus.INVALID_OUTPUT, 1);
+    }
+
     // --- porteiro, cota, sem dados, provedor ---
 
     @Test
@@ -371,5 +399,6 @@ class CoachServiceTest {
         assertThatThrownBy(() -> service.ask(userId, QUESTION)).isSameAs(failure);
 
         verifyLogged(AiRequestStatus.TIMEOUT, 1);
+        verifyLogged(AiRequestStatus.INCOMPLETE, 0); // falhou no 1o passo: nada foi cobrado, nada conta
     }
 }

@@ -10,6 +10,11 @@ public enum AiRequestStatus {
     PROVIDER_ERROR,
     /** Passo intermediario do agente: o modelo pediu ferramentas e a conversa continuou. Nao consome cota. */
     TOOL_STEP,
+    /**
+     * Marcador: a conversa do agente foi interrompida (erro do provedor ou tempo) depois de passos
+     * ja cobrados. Nao e uma chamada ao modelo; existe para a pergunta consumir cota.
+     */
+    INCOMPLETE,
     /** O provedor respondeu, mas a saida nao passou na validacao. */
     INVALID_OUTPUT,
     /** Estouro de timeout. */
@@ -18,7 +23,8 @@ public enum AiRequestStatus {
     /**
      * Status que consomem a cota diaria: chamadas que chegaram a gerar
      * resposta (e custo). Falha do provedor ou timeout nao tiram cota do
-     * usuario - o problema nao foi dele.
+     * usuario - o problema nao foi dele. A excecao e a conversa do agente
+     * interrompida depois de passos ja cobrados (INCOMPLETE).
      */
-    public static final Set<AiRequestStatus> COUNTED_FOR_QUOTA = Set.of(SUCCESS, INVALID_OUTPUT);
+    public static final Set<AiRequestStatus> COUNTED_FOR_QUOTA = Set.of(SUCCESS, INVALID_OUTPUT, INCOMPLETE);
 }
