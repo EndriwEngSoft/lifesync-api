@@ -194,6 +194,34 @@ class AiPersistenceIntegrationTest {
     }
 
     @Test
+    void assertWithinQuota_ChangingTheTimezoneDoesNotResetTheQuotaForever() {
+        // Cota 2. O usuario fez 4 chamadas nas ultimas horas (trocando de fuso no meio) e agora salva o
+        // fuso +09:00: la ja e' 01:00 do dia 07, o "dia" local comecou as 15:00Z e a contagem local e' 0.
+        User user = newUser("fuso", "+09:00");
+        seed(user, AiRequestStatus.SUCCESS, "2026-11-06T10:00:00Z");
+        seed(user, AiRequestStatus.SUCCESS, "2026-11-06T11:00:00Z");
+        seed(user, AiRequestStatus.SUCCESS, "2026-11-06T12:00:00Z");
+        seed(user, AiRequestStatus.SUCCESS, "2026-11-06T13:00:00Z");
+        AiQuotaService quota = quota(2);
+
+        assertThat(quota.usedToday(user.getId(), AiFeature.WEEKLY_PLAN)).isZero();
+        // O teto de 24 horas corridas (2x a cota) nao depende do fuso, entao trocar o fuso nao libera mais.
+        assertThatThrownBy(() -> quota.assertWithinQuota(user.getId(), AiFeature.WEEKLY_PLAN))
+                .isInstanceOf(AiQuotaExceededException.class);
+    }
+
+    @Test
+    void assertWithinQuota_UsageFromYesterdayEveningDoesNotBlockTheNewLocalDay() {
+        // Quem nao troca de fuso nunca chega ao teto de 24 horas: ontem a noite (2) + hoje (1) = 3 < 4.
+        User user = newUser("honesto", "America/Sao_Paulo");
+        seed(user, AiRequestStatus.SUCCESS, "2026-11-06T01:00:00Z");   // 22:00 de ontem
+        seed(user, AiRequestStatus.SUCCESS, "2026-11-06T02:00:00Z");   // 23:00 de ontem
+        seed(user, AiRequestStatus.SUCCESS, "2026-11-06T12:00:00Z");   // hoje
+
+        quota(2).assertWithinQuota(user.getId(), AiFeature.WEEKLY_PLAN);
+    }
+
+    @Test
     void invalidStoredTimezone_FallsBackToUtc() {
         User user = newUser("a", "Isto/Nao_Existe");
         // Em UTC o dia 06 vai de 00:00Z a 24:00Z

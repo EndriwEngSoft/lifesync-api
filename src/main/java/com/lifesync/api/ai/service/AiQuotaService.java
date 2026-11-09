@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -31,6 +32,9 @@ import java.util.UUID;
 @Service
 public class AiQuotaService {
 
+    /** Teto em 24 horas corridas, em multiplos da cota diaria (ver usedInLast24Hours). */
+    static final int ROLLING_CEILING_FACTOR = 2;
+
     private final AiRequestLogRepository logRepository;
     private final UserRepository userRepository;
     private final AiProperties properties;
@@ -47,10 +51,25 @@ public class AiQuotaService {
     /** Lanca AiQuotaExceededException (429) se o usuario ja esgotou a cota de hoje. */
     @Transactional(readOnly = true)
     public void assertWithinQuota(UUID userId, AiFeature feature) {
-        long used = usedToday(userId, feature);
-        if (used >= properties.dailyQuota()) {
+        int quota = properties.dailyQuota();
+        if (usedToday(userId, feature) >= quota
+                || usedInLast24Hours(userId, feature) >= (long) ROLLING_CEILING_FACTOR * quota) {
             throw new AiQuotaExceededException("Daily AI quota reached. Try again tomorrow.");
         }
+    }
+
+    /**
+     * Uso nas ultimas 24 horas corridas, sem depender do fuso. O fuso e' um
+     * dado que o proprio usuario altera: trocando-o, ele moveria a meia-noite
+     * local e zeraria a contagem do "dia". Quem nao troca de fuso usa no
+     * maximo 2x a cota em 24 horas corridas (o fim de um dia e o comeco do
+     * seguinte), entao esse teto nunca o atinge e limita quem troca.
+     */
+    @Transactional(readOnly = true)
+    public long usedInLast24Hours(UUID userId, AiFeature feature) {
+        Instant now = clock.instant();
+        return logRepository.countUsage(userId, feature, AiRequestStatus.COUNTED_FOR_QUOTA,
+                now.minus(Duration.ofHours(24)), now.plusSeconds(1));
     }
 
     @Transactional(readOnly = true)
