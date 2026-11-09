@@ -2,6 +2,7 @@
 
 - **Status:** aceito, com uma decisão em aberto (camada de uso em produção, seção 6)
 - **Data da verificação das fontes:** 2026-11-06
+- **Verificação por execução contra o provedor:** 2026-11-09 (seção 6)
 
 ## 1. Contexto
 
@@ -56,9 +57,14 @@ Usar o **Gemini** por REST, pelo adaptador `GeminiLlmClient`, com a configuraç�
 ## 6. Decisão em aberto e itens não verificados
 
 * **Em aberto (cabe ao mantenedor):** qual camada usar em produção. Para usuários reais, a opção coerente com a política de dados é a camada paga (faturamento ativado), com custo e prazo de retenção de logs a avaliar; a alternativa é manter o módulo desligado ou restrito a contas de demonstração.
+* **Verificado por execução em 2026-11-09** (camada gratuita, só dados sintéticos; números em [decisoes.md](decisoes.md)):
+  * o modelo `gemini-3.5-flash-lite` existe e aceita `generateContent` (consulta a `GET /v1beta/models/gemini-3.5-flash-lite`);
+  * `generationConfig.responseJsonSchema` com tipos em minúsculas (`object`, `array`, `string`), `enum` e `required` é aceito pelo `generateContent`: 19 chamadas, nenhuma rejeitada com HTTP 400. A documentação continua sem um exemplo desse campo para esse endpoint: a página de saída estruturada descreve a Interactions API, e a referência do `generateContent` lista o campo sem detalhar o formato (consultadas de novo em 2026-11-09);
+  * as 18 respostas da avaliação passaram na validação do servidor;
+  * um erro 5xx do provedor ocorreu uma vez e a tentativa seguinte funcionou;
+  * com 10 s de pausa entre as chamadas, nenhuma recebeu 429.
 * **Não verificado:**
   * valores numéricos de RPM, TPM e RPD da camada gratuita;
   * prazo exato de retenção dos logs na camada paga e localização do processamento;
-  * se `responseJsonSchema` aceita exatamente o esquema enviado (tipos em minúsculas) no endpoint `generateContent`; a página de saída estruturada que consultei descrevia outro endpoint (Interactions API). A resposta é sempre revalidada no servidor, então uma rejeição do esquema (HTTP 400) aparece como erro do provedor e se corrige em `WeeklyPlanSchema`;
-  * se os tokens de raciocínio (`thoughtsTokenCount`) contam dentro de `maxOutputTokens`; o padrão (4096) deixa margem;
-  * qualquer comportamento real do modelo: nenhuma chamada ao provedor foi feita durante o desenvolvimento, e os testes automatizados nunca chamam um LLM.
+  * se os tokens de raciocínio (`thoughtsTokenCount`) contam dentro de `maxOutputTokens`; nas chamadas feitas a saída ficou entre 245 e 532 tokens, longe do teto de 4096. Uma resposta cortada é tratada como saída inválida e consome cota;
+  * o comportamento com dados reais e em produção: as chamadas foram feitas pelo teste de avaliação, com dados sintéticos; a suíte padrão e o CI nunca chamam um LLM.
