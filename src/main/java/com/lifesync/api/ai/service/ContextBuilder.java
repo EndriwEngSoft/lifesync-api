@@ -67,7 +67,10 @@ public class ContextBuilder {
     /** Teto de leitura do banco antes de ranquear as tarefas. */
     private static final int TASK_FETCH_CAP = 200;
 
-    private static final Pattern CONTROL_OR_SPACES = Pattern.compile("[\\p{Cntrl}\\s]+");
+    // UNICODE_CHARACTER_CLASS: sem ela, \s e \p{Cntrl} so cobrem ASCII e deixariam passar as quebras
+    // de linha Unicode (U+2028, U+2029, U+0085). \p{Cf} cobre os invisiveis (largura zero, direcao).
+    private static final Pattern CONTROL_OR_SPACES =
+            Pattern.compile("[\\p{Cntrl}\\p{Cf}\\s]+", Pattern.UNICODE_CHARACTER_CLASS);
     private static final Pattern EMAIL = Pattern.compile("[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+");
     private static final Pattern CPF = Pattern.compile("\\b\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}\\b");
     private static final Pattern LONG_NUMBER = Pattern.compile("\\d{9,}");
