@@ -334,7 +334,7 @@ A rodada 1 foi reprovada por um falso positivo da própria checagem (o plano cit
 
 ## Testes
 
-**297 testes**, executados a cada push e pull request pelo CI (veja o badge no topo): 65 do núcleo (tabela abaixo) e 232 do módulo de IA. A maioria é unitária (Mockito, sem banco); os de integração sobem um PostgreSQL real com Testcontainers. Nenhum teste da suíte chama um LLM: o módulo de IA é testado com um servidor HTTP simulado e com o provedor de mentira.
+**300 testes**, executados a cada push e pull request pelo CI (veja o badge no topo): 65 do núcleo (tabela abaixo) e 235 do módulo de IA. A maioria é unitária (Mockito, sem banco); os de integração sobem um PostgreSQL real com Testcontainers. Nenhum teste da suíte chama um LLM: o módulo de IA é testado com um servidor HTTP simulado e com o provedor de mentira.
 
 | Classe | Tipo | Qtde. |
 |---|---|---|
@@ -357,7 +357,7 @@ O teste parametrizado do `HabitServiceTest` cobre as regras de streak por frequ�
 
 O teste de integração sobe o contexto Spring completo contra um container PostgreSQL, aplica as migrações Flyway (`V1` → `V3`) e, com `ddl-auto: validate`, falha se alguma entidade não bater com o schema.
 
-Os 232 testes do módulo de IA (`src/test/java/com/lifesync/api/ai`) cobrem, entre outros: o assistente (ferramenta inexistente, argumento inválido, limite de passos, tempo, injeção pelos títulos, usuário A nunca recebe dados do B), a lista de permitidos (usuário fora dela recebe `503` sem chamada ao provedor), o cliente do Gemini contra um servidor simulado (sucesso, 429, 5xx, timeout real, corpo malformado, bloqueio, resposta cortada), a validação da saída do modelo (JSON inválido, índice inventado, tipo incoerente), o contexto (só dados do usuário, saneamento e mascaramento dos títulos), a cota por fuso, o endpoint com JWT real (`401` sem token, usuário A nunca recebe item do B) e a varredura das métricas em busca de dados sensíveis.
+Os 235 testes do módulo de IA (`src/test/java/com/lifesync/api/ai`) cobrem, entre outros: o assistente (ferramenta inexistente, argumento inválido, limite de passos, tempo, injeção pelos títulos, usuário A nunca recebe dados do B), a lista de permitidos (usuário fora dela recebe `503` sem chamada ao provedor), o cliente do Gemini contra um servidor simulado (sucesso, 429, 5xx, timeout real, corpo malformado, bloqueio, resposta cortada), a validação da saída do modelo (JSON inválido, índice inventado, tipo incoerente), o contexto (só dados do usuário, saneamento e mascaramento dos títulos), a cota por fuso, o endpoint com JWT real (`401` sem token, usuário A nunca recebe item do B) e a varredura das métricas em busca de dados sensíveis.
 
 ---
 
