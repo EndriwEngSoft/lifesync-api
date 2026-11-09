@@ -34,7 +34,7 @@ public class AiMetrics {
     public static final String REJECTIONS = "lifesync.ai.rejections";
 
     /** Motivos de um pedido barrado antes de chegar ao provedor. */
-    public enum Rejection { DISABLED, QUOTA_EXCEEDED }
+    public enum Rejection { DISABLED, NOT_ALLOWED, QUOTA_EXCEEDED }
 
     private final MeterRegistry registry;
 

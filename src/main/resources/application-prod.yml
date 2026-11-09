@@ -51,4 +51,6 @@ lifesync:
     # LLM_API_KEY. O provider "fake" nao deve ser usado em producao.
     enabled: ${LIFESYNC_AI_ENABLED:false}
     provider: ${LIFESYNC_AI_PROVIDER:}
+    # Mesmo ligado, so os ids desta lista usam a IA; vazia = ninguem (503).
+    allowed-users: "${LIFESYNC_AI_ALLOWED_USERS:}"
     api-key: ${LLM_API_KEY:}

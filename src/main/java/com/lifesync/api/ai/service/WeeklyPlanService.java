@@ -43,7 +43,7 @@ import java.util.regex.Pattern;
 /**
  * Gera o plano semanal do usuario autenticado.
  *
- * Fluxo: modulo ligado? -> cota diaria -> contexto minimizado (sem dados, nao
+ * Fluxo: modulo ligado? -> usuario na lista de permitidos? -> cota diaria -> contexto minimizado (sem dados, nao
  * chama o LLM) -> chamada ao LLM -> parse -> Bean Validation -> indices
  * existentes -> troca dos indices pelos ids reais -> log da chamada.
  *
@@ -95,6 +95,12 @@ public class WeeklyPlanService {
             client = availability.requireClient();                    // 503 se desligado
         } catch (AiDisabledException e) {
             metrics.recordRejection(AiFeature.WEEKLY_PLAN, Rejection.DISABLED);
+            throw e;
+        }
+        try {
+            availability.requireAllowed(userId);                      // 503 se fora da lista de permitidos
+        } catch (AiDisabledException e) {
+            metrics.recordRejection(AiFeature.WEEKLY_PLAN, Rejection.NOT_ALLOWED);
             throw e;
         }
         try {

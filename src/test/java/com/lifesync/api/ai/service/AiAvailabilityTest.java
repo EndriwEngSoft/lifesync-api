@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.time.Duration;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,7 +19,7 @@ class AiAvailabilityTest {
 
     private AiProperties props(boolean enabled) {
         return new AiProperties(enabled, "fake", "", "http://localhost", "m", Duration.ofSeconds(5),
-                Duration.ofSeconds(5), 100, 5, 3, Duration.ZERO);
+                Duration.ofSeconds(5), 100, 5, 3, Duration.ZERO, List.of("*"));
     }
 
     @SuppressWarnings("unchecked")
@@ -38,6 +39,31 @@ class AiAvailabilityTest {
         AiAvailability availability = new AiAvailability(props(true), provider);
 
         assertThatThrownBy(availability::requireClient).isInstanceOf(AiDisabledException.class);
+    }
+
+    // --- lista de permitidos ---
+
+    private AiAvailability withAllowed(List<String> allowedUsers) {
+        return new AiAvailability(new AiProperties(true, "fake", "", "http://localhost", "m",
+                Duration.ofSeconds(5), Duration.ofSeconds(5), 100, 5, 3, Duration.ZERO, allowedUsers), provider);
+    }
+
+    @Test
+    void userOutsideTheAllowList_IsRejectedLikeADisabledModule() {
+        java.util.UUID allowed = java.util.UUID.randomUUID();
+        AiAvailability availability = withAllowed(List.of(allowed.toString()));
+
+        assertThatThrownBy(() -> availability.requireAllowed(java.util.UUID.randomUUID()))
+                .isInstanceOf(AiDisabledException.class);
+        availability.requireAllowed(allowed); // o usuario da lista passa
+    }
+
+    @Test
+    void emptyAllowList_RejectsEveryone() {
+        AiAvailability availability = withAllowed(List.of());
+
+        assertThatThrownBy(() -> availability.requireAllowed(java.util.UUID.randomUUID()))
+                .isInstanceOf(AiDisabledException.class);
     }
 
     @Test

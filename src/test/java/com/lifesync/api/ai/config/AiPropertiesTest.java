@@ -118,6 +118,63 @@ class AiPropertiesTest {
         });
     }
 
+    // --- Lista de permitidos ---
+
+    private static final java.util.UUID DEMO = java.util.UUID.fromString("0b9d6f0e-6a55-4b0c-9a55-0d7f0a1c2e3f");
+
+    @Test
+    void withoutAllowedUsers_NobodyIsAllowed() {
+        runner.run(context -> {
+            AiProperties props = context.getBean(AiProperties.class);
+            assertThat(props.allowedUsers()).isEmpty();
+            assertThat(props.allowsUser(DEMO)).isFalse();
+        });
+    }
+
+    @Test
+    void blankAllowedUsers_NobodyIsAllowed() {
+        runner.withPropertyValues("lifesync.ai.allowed-users=").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(AiProperties.class).allowsUser(DEMO)).isFalse();
+        });
+    }
+
+    @Test
+    void allowedUsers_AreReadFromACommaSeparatedListOfIds() {
+        java.util.UUID other = java.util.UUID.randomUUID();
+        runner.withPropertyValues("lifesync.ai.allowed-users= " + DEMO.toString().toUpperCase() + " , " + other)
+                .run(context -> {
+                    AiProperties props = context.getBean(AiProperties.class);
+                    assertThat(props.allowsUser(DEMO)).isTrue();
+                    assertThat(props.allowsUser(other)).isTrue();
+                    assertThat(props.allowsUser(java.util.UUID.randomUUID())).isFalse();
+                });
+    }
+
+    @Test
+    void invalidIdInAllowedUsers_FailsStartup() {
+        runner.withPropertyValues("lifesync.ai.allowed-users=" + DEMO + ",nao-e-um-uuid").run(context -> {
+            assertThat(context).hasFailed();
+            assertThat(allMessages(context.getStartupFailure())).contains("lifesync.ai.allowed-users");
+        });
+    }
+
+    @Test
+    void wildcard_AllowsEveryone() {
+        runner.withPropertyValues("lifesync.ai.allowed-users=*").run(context ->
+                assertThat(context.getBean(AiProperties.class).allowsUser(java.util.UUID.randomUUID())).isTrue());
+    }
+
+    @Test
+    void devYaml_AllowsEveryoneAndProdYaml_AllowsNobodyByDefault() {
+        runner.withInitializer(new ConfigDataApplicationContextInitializer())
+                .withPropertyValues("lifesync.ai.api-key=").run(context ->
+                        assertThat(context.getBean(AiProperties.class).allowsUser(DEMO)).isTrue());
+        runner.withInitializer(new ConfigDataApplicationContextInitializer())
+                .withPropertyValues("spring.profiles.active=prod").run(context ->
+                        assertThat(context.getBean(AiProperties.class).allowedUsers()).isEmpty());
+    }
+
     // --- Os yml reais: dev liga o fake; producao nasce desligada e sem provider ---
 
     @Test

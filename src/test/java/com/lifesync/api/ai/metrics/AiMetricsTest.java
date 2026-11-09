@@ -67,7 +67,7 @@ class AiMetricsTest {
     @BeforeEach
     void setUp() {
         AiProperties props = new AiProperties(true, "gemini", API_KEY, "http://localhost", "gemini-test",
-                Duration.ofSeconds(5), Duration.ofSeconds(5), 100, 5, 3, Duration.ZERO);
+                Duration.ofSeconds(5), Duration.ofSeconds(5), 100, 5, 3, Duration.ZERO, List.of("*"));
         service = new WeeklyPlanService(availability, quotaService, contextBuilder, logService, props,
                 JsonMapper.builder().build(), Validation.buildDefaultValidatorFactory().getValidator(), metrics);
         when(availability.requireClient()).thenReturn(llmClient);

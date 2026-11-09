@@ -42,6 +42,16 @@ class RenderBlueprintTest {
     }
 
     @Test
+    void allowedUsers_ExistsWithoutAnyValueInTheRepository() throws IOException {
+        var allowed = envVars().get("LIFESYNC_AI_ALLOWED_USERS");
+
+        // Sem valor no repositorio: a lista (ids de contas) so e preenchida no painel, e vazia = ninguem.
+        assertThat(allowed).isNotNull();
+        assertThat(allowed.get("sync")).isEqualTo(false);
+        assertThat(allowed).doesNotContainKey("value");
+    }
+
+    @Test
     void apiKey_IsASecretFilledInTheDashboard() throws IOException {
         var key = envVars().get("LLM_API_KEY");
 

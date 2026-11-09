@@ -6,6 +6,8 @@ import com.lifesync.api.ai.exception.AiDisabledException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
+import java.util.UUID;
+
 /**
  * Porteiro do modulo de IA. Falha fechada: com a flag desligada, ou sem
  * nenhum LlmClient registrado, devolve 503 antes de tocar no banco ou na
@@ -32,5 +34,16 @@ public class AiAvailability {
             throw new AiDisabledException("AI provider is not configured.");
         }
         return client;
+    }
+
+    /**
+     * Lista de permitidos: so os usuarios configurados usam o modulo. Para os
+     * demais a resposta e' o mesmo 503 do modulo desligado, sem revelar que a
+     * lista existe.
+     */
+    public void requireAllowed(UUID userId) {
+        if (!properties.allowsUser(userId)) {
+            throw new AiDisabledException("AI module is not available for this user.");
+        }
     }
 }

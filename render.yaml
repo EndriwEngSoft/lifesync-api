@@ -31,6 +31,10 @@ services:
         value: "false"
       - key: LIFESYNC_AI_PROVIDER
         value: ""
+      # Lista de permitidos: ids (UUID) das contas que podem usar a IA, separados
+      # por virgula. Sem valor no repositorio; vazia = ninguem usa, mesmo ligado.
+      - key: LIFESYNC_AI_ALLOWED_USERS
+        sync: false
       # Chave do provedor: nunca no repositorio; preenchida no painel do Render.
       - key: LLM_API_KEY
         sync: false

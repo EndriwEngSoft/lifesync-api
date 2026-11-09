@@ -19,6 +19,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -51,7 +52,7 @@ class GeminiLlmClientTest {
 
     private void setUpWith(int maxAttempts) {
         AiProperties props = new AiProperties(true, "gemini", KEY, "http://gemini.test", "gemini-test",
-                Duration.ofSeconds(5), Duration.ofSeconds(5), 1234, 5, maxAttempts, Duration.ZERO);
+                Duration.ofSeconds(5), Duration.ofSeconds(5), 1234, 5, maxAttempts, Duration.ZERO, List.of("*"));
         RestClient.Builder builder = GeminiRestClientConfig.builder(props);
         server = MockRestServiceServer.bindTo(builder).build();
         client = new GeminiLlmClient(props, builder.build());

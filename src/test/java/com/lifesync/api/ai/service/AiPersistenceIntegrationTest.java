@@ -241,7 +241,7 @@ class AiPersistenceIntegrationTest {
 
     private AiQuotaService quota(int dailyQuota) {
         AiProperties props = new AiProperties(true, "fake", "", "http://localhost", "m", Duration.ofSeconds(5),
-                Duration.ofSeconds(5), 100, dailyQuota, 3, Duration.ZERO);
+                Duration.ofSeconds(5), 100, dailyQuota, 3, Duration.ZERO, List.of("*"));
         return new AiQuotaService(logRepository, userRepository, props, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

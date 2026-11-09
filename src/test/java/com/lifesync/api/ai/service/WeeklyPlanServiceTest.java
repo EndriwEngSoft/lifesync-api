@@ -78,7 +78,7 @@ class WeeklyPlanServiceTest {
     @BeforeEach
     void setUp() {
         AiProperties props = new AiProperties(true, "gemini", "chave-de-teste", "http://localhost", "gemini-test",
-                Duration.ofSeconds(5), Duration.ofSeconds(5), 100, 5, 3, Duration.ZERO);
+                Duration.ofSeconds(5), Duration.ofSeconds(5), 100, 5, 3, Duration.ZERO, List.of("*"));
         service = new WeeklyPlanService(availability, quotaService, contextBuilder, logService, props,
                 objectMapper, validator, new com.lifesync.api.ai.metrics.AiMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()));
         when(availability.requireClient()).thenReturn(llmClient);

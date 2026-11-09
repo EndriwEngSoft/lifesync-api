@@ -4,7 +4,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Configuracao do modulo de IA (prefixo lifesync.ai). Valores padrao seguros
@@ -22,6 +26,7 @@ import java.util.Locale;
  * @param dailyQuota     chamadas bem-sucedidas por usuario por dia
  * @param maxAttempts    tentativas totais por chamada (1 = sem retry)
  * @param retryBackoff   espera base entre tentativas (dobra a cada tentativa)
+ * @param allowedUsers   ids (UUID) dos usuarios que podem usar o modulo; vazio = ninguem
  */
 @ConfigurationProperties(prefix = "lifesync.ai")
 public record AiProperties(
@@ -35,15 +40,22 @@ public record AiProperties(
         @DefaultValue("4096") int maxTokens,
         @DefaultValue("5") int dailyQuota,
         @DefaultValue("3") int maxAttempts,
-        @DefaultValue("500ms") Duration retryBackoff
+        @DefaultValue("500ms") Duration retryBackoff,
+        @DefaultValue("") List<String> allowedUsers
 ) {
 
     public static final String PROVIDER_FAKE = "fake";
     public static final String PROVIDER_GEMINI = "gemini";
+    /** Curinga da lista de permitidos: qualquer usuario. So para desenvolvimento e testes. */
+    public static final String ANY_USER = "*";
+
+    private static final Pattern UUID_FORMAT = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
     public AiProperties {
         provider = provider == null ? "" : provider.trim().toLowerCase(Locale.ROOT);
         apiKey = apiKey == null ? "" : apiKey.trim();
+        allowedUsers = normalizeAllowedUsers(allowedUsers);
 
         requirePositive(connectTimeout, "lifesync.ai.connect-timeout");
         requirePositive(readTimeout, "lifesync.ai.read-timeout");
@@ -81,6 +93,37 @@ public record AiProperties(
         }
     }
 
+    /**
+     * Falha fechada: lista vazia = ninguem. Cada entrada e' o id (UUID) de um
+     * usuario ou o curinga. Entrada invalida derruba a subida: um id digitado
+     * errado nao pode virar, em silencio, "ninguem" nem "todos".
+     */
+    public boolean allowsUser(UUID userId) {
+        if (userId == null) {
+            return false;
+        }
+        return allowedUsers.contains(ANY_USER) || allowedUsers.contains(userId.toString());
+    }
+
+    private static List<String> normalizeAllowedUsers(List<String> raw) {
+        if (raw == null) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (String entry : raw) {
+            String value = entry == null ? "" : entry.trim();
+            if (value.isEmpty()) {
+                continue;
+            }
+            if (!ANY_USER.equals(value) && !UUID_FORMAT.matcher(value).matches()) {
+                throw new IllegalArgumentException(
+                        "lifesync.ai.allowed-users must contain only user ids (UUID) separated by commas");
+            }
+            result.add(value.toLowerCase(Locale.ROOT));
+        }
+        return List.copyOf(result);
+    }
+
     private static void requirePositive(Duration value, String name) {
         if (value == null || value.isZero() || value.isNegative()) {
             throw new IllegalArgumentException(name + " must be positive");
@@ -100,6 +143,7 @@ public record AiProperties(
                 + ", maxTokens=" + maxTokens
                 + ", dailyQuota=" + dailyQuota
                 + ", maxAttempts=" + maxAttempts
-                + ", retryBackoff=" + retryBackoff + "]";
+                + ", retryBackoff=" + retryBackoff
+                + ", allowedUsers=" + allowedUsers.size() + " entries]";
     }
 }

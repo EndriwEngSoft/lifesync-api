@@ -6,6 +6,7 @@ import org.springframework.web.client.RestClient;
 
 import java.net.ServerSocket;
 import java.time.Duration;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -21,7 +22,7 @@ class GeminiRestClientConfigTest {
         try (ServerSocket silent = new ServerSocket(0)) {
             AiProperties props = new AiProperties(true, "gemini", "chave-de-teste",
                     "http://localhost:" + silent.getLocalPort(), "m",
-                    Duration.ofSeconds(2), Duration.ofMillis(300), 100, 5, 1, Duration.ZERO);
+                    Duration.ofSeconds(2), Duration.ofMillis(300), 100, 5, 1, Duration.ZERO, List.of("*"));
             RestClient client = new GeminiRestClientConfig().geminiRestClient(props);
 
             long start = System.nanoTime();

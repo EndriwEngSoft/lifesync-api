@@ -70,6 +70,11 @@ lifesync:
     # o provider vazio: ligar exige escolher o provider de forma explicita.
     enabled: ${LIFESYNC_AI_ENABLED:true}
     provider: ${LIFESYNC_AI_PROVIDER:fake}
+    # Lista de permitidos: ids (UUID) dos usuarios que podem usar a IA,
+    # separados por virgula. Vazia = ninguem. O curinga "*" (qualquer usuario)
+    # e' so para desenvolvimento e testes com o provider fake; em producao o
+    # padrao e' vazio (application-prod.yml).
+    allowed-users: "${LIFESYNC_AI_ALLOWED_USERS:*}"
     # Chave do provedor so por variavel de ambiente. Vazia por padrao; o
     # AiProperties derruba a subida se o provider for gemini e ela faltar.
     api-key: ${LLM_API_KEY:}
