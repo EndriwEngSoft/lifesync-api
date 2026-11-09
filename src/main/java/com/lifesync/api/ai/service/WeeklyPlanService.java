@@ -206,17 +206,44 @@ public class WeeklyPlanService {
     /**
      * Se o modelo citar um indice (T1) num texto livre, troca pelo titulo do
      * item: o cliente nao conhece os indices. Indice que nao existe fica como esta.
+     * O que esta dentro de um titulo citado pelo modelo tambem fica: um titulo
+     * como "prova G1" contem algo com cara de indice, mas e' texto do usuario.
      */
     private static String humanize(String text, Map<String, String> titlesByIndex) {
+        List<int[]> quotedTitles = titleRanges(text, titlesByIndex.values());
         Matcher matcher = INDEX_TOKEN.matcher(text);
         StringBuilder out = new StringBuilder();
         while (matcher.find()) {
             String title = titlesByIndex.get(matcher.group(1));
-            matcher.appendReplacement(out, Matcher.quoteReplacement(title == null ? matcher.group(1)
+            boolean keep = title == null || isInside(matcher.start(), quotedTitles);
+            matcher.appendReplacement(out, Matcher.quoteReplacement(keep ? matcher.group(1)
                     : "\"" + title + "\""));
         }
         matcher.appendTail(out);
         return out.toString();
+    }
+
+    /** Intervalos [inicio, fim) do texto ocupados por citacoes literais dos titulos do contexto. */
+    private static List<int[]> titleRanges(String text, Iterable<String> titles) {
+        List<int[]> ranges = new ArrayList<>();
+        for (String title : titles) {
+            if (title == null || title.isBlank()) {
+                continue;
+            }
+            for (int at = text.indexOf(title); at >= 0; at = text.indexOf(title, at + title.length())) {
+                ranges.add(new int[] {at, at + title.length()});
+            }
+        }
+        return ranges;
+    }
+
+    private static boolean isInside(int position, List<int[]> ranges) {
+        for (int[] range : ranges) {
+            if (position >= range[0] && position < range[1]) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static WeeklyPlanResponseDTO emptyPlan() {

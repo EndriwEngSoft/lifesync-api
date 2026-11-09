@@ -144,6 +144,31 @@ class WeeklyPlanServiceTest {
     }
 
     @Test
+    void success_KeepsATitleQuotedByTheModelEvenWhenItLooksLikeAnIndex() {
+        // O titulo da tarefa contem "G1" (nome de uma prova) e existe uma meta G1 no contexto.
+        UserContextDTO context = new UserContextDTO("2026-11-06", "FRIDAY", "America/Sao_Paulo",
+                List.of(new TaskContext("T1", "Estudar para a prova G1 de Calculo", "HIGH", "PENDING", null, false)),
+                List.of(),
+                List.of(new GoalContext("G1", "Juntar dinheiro", "IN_PROGRESS", 25.0, "2026-12-31")));
+        Map<String, Reference> refs = new LinkedHashMap<>();
+        refs.put("T1", new Reference(ReferenceType.TASK, taskId));
+        refs.put("G1", new Reference(ReferenceType.GOAL, goalId));
+        when(contextBuilder.build(userId)).thenReturn(new BuiltContext(context, refs));
+        llmReturns("""
+                {"summary":"Foque em Estudar para a prova G1 de Calculo e depois em G1.",
+                 "priorities":[{"type":"TASK","referenceId":"T1","reason":"Prova proxima."}],
+                 "risks":[],
+                 "schedule":{}}
+                """);
+
+        WeeklyPlanResponseDTO plan = service.generate(userId);
+
+        // Dentro do titulo citado o "G1" fica; o "G1" solto, que e' indice, vira o titulo da meta.
+        assertThat(plan.summary())
+                .isEqualTo("Foque em Estudar para a prova G1 de Calculo e depois em \"Juntar dinheiro\".");
+    }
+
+    @Test
     void success_RequestToTheLlmCarriesOnlyMinimizedContextAndTheSchema() {
         llmReturns(VALID_PLAN);
 
@@ -216,6 +241,7 @@ class WeeklyPlanServiceTest {
     @ValueSource(strings = {
             "isto nao e json",
             "{ \"summary\": ",
+            "",                                                        // resposta cortada antes de qualquer texto
             "[]",
             "null",
             "{\"summary\":\"ok\"}",                                   // faltam campos obrigatorios
