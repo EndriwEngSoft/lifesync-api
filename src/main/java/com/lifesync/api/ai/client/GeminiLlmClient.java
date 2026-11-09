@@ -33,8 +33,9 @@ import java.util.Set;
  * - as instrucoes fixas vao em systemInstruction; os dados do usuario, em
  *   contents, entre <user_data>, com '<' e '>' escapados para o usuario nao
  *   conseguir fechar a tag;
- * - resposta sem candidatos, bloqueada ou cortada vira LlmProviderException
- *   tipada, nunca NullPointerException;
+ * - resposta sem candidatos, vazia ou bloqueada vira LlmProviderException
+ *   tipada, nunca NullPointerException; a cortada no teto de tokens e'
+ *   devolvida com os tokens gastos, para o servico rejeitar e contabilizar;
  * - so erros passageiros (429, 5xx, timeout) sao repetidos, com backoff
  *   exponencial e numero maximo de tentativas;
  * - nem a chave nem o corpo das respostas aparecem em mensagem ou log.
@@ -81,7 +82,8 @@ public class GeminiLlmClient implements LlmClient {
     }
 
     /**
-     * Troca '<' e '>' pelas sequencias JSON < e >. Como o contexto e'
+     * Troca '<' e '>' pelas sequencias de escape JSON (barra invertida + u003c
+     * e barra invertida + u003e). Como o contexto e'
      * JSON e esses caracteres so aparecem dentro de strings, a troca mantem o
      * JSON valido e impede que um titulo contendo "</user_data>" feche a tag.
      */
@@ -191,12 +193,13 @@ public class GeminiLlmClient implements LlmClient {
             throw new LlmProviderException(Type.BLOCKED, "Response was blocked by the provider.");
         }
 
+        // Resposta cortada no teto de tokens foi gerada e cobrada: ela segue adiante, mesmo vazia,
+        // com os tokens reais. A validacao do servico a rejeita como saida invalida, que consome
+        // cota; se virasse erro do provedor, repetir a chamada mais cara sairia de graca.
+        boolean cutAtTokenLimit = "MAX_TOKENS".equals(finishReason);
         String text = extractText(candidate);
-        if (text.isBlank()) {
+        if (text.isBlank() && !cutAtTokenLimit) {
             throw new LlmProviderException(Type.EMPTY_RESPONSE, "Provider returned no text.");
-        }
-        if ("MAX_TOKENS".equals(finishReason)) {
-            throw new LlmProviderException(Type.INVALID_RESPONSE, "Response was cut at the token limit.");
         }
 
         UsageMetadata usage = response.usageMetadata();

@@ -357,14 +357,32 @@ class GeminiLlmClientTest {
     }
 
     @Test
-    void maxTokensFinishReason_IsInvalidResponseNotRetried() {
+    void responseCutByMaxTokens_IsReturnedForTheServiceToReject() {
         respondOnce("""
                 {"candidates":[{"content":{"parts":[{"text":"{\\"summary\\":\\"cortad"}]},"finishReason":"MAX_TOKENS"}]}
                 """);
 
-        assertThatThrownBy(() -> client.generatePlan(request("{}")))
-                .isInstanceOfSatisfying(LlmProviderException.class,
-                        e -> assertThat(e.getType()).isEqualTo(Type.INVALID_RESPONSE));
+        // A resposta cortada foi gerada (e cobrada): o cliente a devolve com os tokens, e quem a
+        // rejeita e' a validacao do servico (INVALID_OUTPUT, que consome cota).
+        LlmResponse response = client.generatePlan(request("{}"));
+
+        assertThat(response.content()).isEqualTo("{\"summary\":\"cortad");
+        server.verify();
+    }
+
+    @Test
+    void responseCutByMaxTokensBeforeAnyText_IsReturnedEmptyWithItsTokens() {
+        // O raciocinio do modelo pode consumir o teto inteiro: nenhum texto, mas tokens cobrados.
+        respondOnce("""
+                {"candidates":[{"content":{"role":"model"},"finishReason":"MAX_TOKENS"}],
+                 "usageMetadata":{"promptTokenCount":700,"candidatesTokenCount":0,"thoughtsTokenCount":4096}}
+                """);
+
+        LlmResponse response = client.generatePlan(request("{}"));
+
+        assertThat(response.content()).isEmpty();
+        assertThat(response.inputTokens()).isEqualTo(700);
+        assertThat(response.outputTokens()).isEqualTo(4096);
         server.verify();
     }
 
