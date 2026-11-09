@@ -39,4 +39,21 @@ class FakeLlmClientTest {
         assertThat(plan("{}").at("/priorities").size()).isZero();
         assertThat(plan(null).at("/summary").asString()).isNotBlank();
     }
+
+    @Test
+    void chat_AsksForAToolFirstAndAnswersOnceItHasTheResult() {
+        FakeLlmClient fake = new FakeLlmClient();
+
+        LlmToolResponse step1 = fake.chat(new LlmToolRequest("sistema", "pergunta",
+                java.util.List.of(), java.util.List.of()));
+        assertThat(step1.hasToolCalls()).isTrue();
+        assertThat(step1.toolCalls().getFirst().name()).isEqualTo("tarefas_atrasadas");
+
+        ToolExchange exchange = new ToolExchange(step1.rawModelTurn(), java.util.List.of(
+                new ToolResult("fake-call-1", "tarefas_atrasadas", java.util.Map.of("total", 0))));
+        LlmToolResponse step2 = fake.chat(new LlmToolRequest("sistema", "pergunta",
+                java.util.List.of(), java.util.List.of(exchange)));
+        assertThat(step2.hasToolCalls()).isFalse();
+        assertThat(step2.text()).isNotBlank();
+    }
 }

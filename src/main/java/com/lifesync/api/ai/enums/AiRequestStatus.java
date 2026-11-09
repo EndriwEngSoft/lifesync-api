@@ -8,6 +8,8 @@ public enum AiRequestStatus {
     SUCCESS,
     /** O provedor falhou (429, 5xx, bloqueio, resposta vazia...). */
     PROVIDER_ERROR,
+    /** Passo intermediario do agente: o modelo pediu ferramentas e a conversa continuou. Nao consome cota. */
+    TOOL_STEP,
     /** O provedor respondeu, mas a saida nao passou na validacao. */
     INVALID_OUTPUT,
     /** Estouro de timeout. */

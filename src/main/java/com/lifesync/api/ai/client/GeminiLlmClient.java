@@ -13,11 +13,14 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
+import tools.jackson.databind.JsonNode;
 
 import java.io.InterruptedIOException;
 import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,6 +54,11 @@ public class GeminiLlmClient implements LlmClient {
             "SAFETY", "RECITATION", "LANGUAGE", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII",
             "IMAGE_SAFETY", "IMAGE_PROHIBITED_CONTENT", "IMAGE_RECITATION");
 
+    /** Motivos de parada em que o modelo nao conseguiu montar um pedido de ferramenta valido. */
+    private static final Set<String> TOOL_FAILURE_FINISH_REASONS = Set.of(
+            "MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL", "TOO_MANY_TOOL_CALLS",
+            "MISSING_THOUGHT_SIGNATURE", "MALFORMED_RESPONSE");
+
     private final RestClient restClient;
     private final AiProperties properties;
 
@@ -65,10 +73,147 @@ public class GeminiLlmClient implements LlmClient {
 
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
-        GeminiResponse response = callWithRetry(body);
+        GeminiResponse response = callWithRetry(body, GeminiResponse.class);
         stopWatch.stop();
 
         return toLlmResponse(response, stopWatch.getTotalTimeMillis());
+    }
+
+    // --- Chamada com ferramentas (function calling) ---
+
+    /**
+     * Um passo da conversa com ferramentas. Formato conferido na referencia do
+     * generateContent e por execucao (ver docs/ai/adr-0003-agente-ferramentas.md):
+     * tools[].functionDeclarations[].{name,description,parametersJsonSchema};
+     * o modelo responde com parts[].functionCall.{id,name,args}; o resultado
+     * volta num turno "user" com parts[].functionResponse.{id,name,response},
+     * depois do turno do modelo devolvido sem alteracao.
+     */
+    @Override
+    public LlmToolResponse chat(LlmToolRequest request) {
+        Map<String, Object> body = buildToolRequest(request);
+
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start();
+        JsonNode response = callWithRetry(body, JsonNode.class);
+        stopWatch.stop();
+
+        return toToolResponse(response, stopWatch.getTotalTimeMillis());
+    }
+
+    private Map<String, Object> buildToolRequest(LlmToolRequest request) {
+        List<Object> contents = new ArrayList<>();
+        contents.add(Map.of("role", "user", "parts", List.of(Map.of("text", request.userMessage()))));
+        for (ToolExchange exchange : request.history()) {
+            contents.add(exchange.rawModelTurn()); // intacto: carrega a assinatura de raciocinio
+            List<Object> parts = new ArrayList<>();
+            for (ToolResult result : exchange.results()) {
+                Map<String, Object> functionResponse = new LinkedHashMap<>();
+                if (result.callId() != null) {
+                    functionResponse.put("id", result.callId());
+                }
+                functionResponse.put("name", result.name());
+                functionResponse.put("response", result.response());
+                parts.add(Map.of("functionResponse", functionResponse));
+            }
+            contents.add(Map.of("role", "user", "parts", parts));
+        }
+
+        List<Object> declarations = new ArrayList<>();
+        for (ToolSpec tool : request.tools()) {
+            Map<String, Object> declaration = new LinkedHashMap<>();
+            declaration.put("name", tool.name());
+            declaration.put("description", tool.description());
+            declaration.put("parametersJsonSchema", tool.parametersSchema());
+            declarations.add(declaration);
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("systemInstruction", Map.of("parts", List.of(Map.of("text", request.systemPrompt()))));
+        body.put("contents", contents);
+        body.put("tools", List.of(Map.of("functionDeclarations", declarations)));
+        body.put("generationConfig", Map.of("maxOutputTokens", properties.maxTokens()));
+        return body;
+    }
+
+    private LlmToolResponse toToolResponse(JsonNode response, long latencyMs) {
+        if (isRealBlock(response.path("promptFeedback").path("blockReason").stringValue(null))) {
+            throw new LlmProviderException(Type.BLOCKED, "Prompt was blocked by the provider.");
+        }
+        JsonNode candidate = response.path("candidates").path(0);
+        if (!candidate.isObject()) {
+            throw new LlmProviderException(Type.EMPTY_RESPONSE, "Provider returned no candidates.");
+        }
+        String finishReason = candidate.path("finishReason").stringValue(null);
+        if (finishReason != null && BLOCKING_FINISH_REASONS.contains(finishReason)) {
+            throw new LlmProviderException(Type.BLOCKED, "Response was blocked by the provider.");
+        }
+        if (finishReason != null && TOOL_FAILURE_FINISH_REASONS.contains(finishReason)) {
+            throw new LlmProviderException(Type.INVALID_RESPONSE, "Provider could not produce a valid tool call.");
+        }
+
+        JsonNode content = candidate.path("content");
+        List<ToolCall> calls = new ArrayList<>();
+        StringBuilder text = new StringBuilder();
+        for (JsonNode part : content.path("parts")) {
+            JsonNode functionCall = part.path("functionCall");
+            if (functionCall.isObject()) {
+                calls.add(toToolCall(functionCall));
+            } else if (part.path("text").isString() && !part.path("thought").booleanValue(false)) {
+                text.append(part.path("text").stringValue());
+            }
+        }
+
+        boolean truncated = "MAX_TOKENS".equals(finishReason);
+        if (calls.isEmpty() && text.toString().isBlank() && !truncated) {
+            throw new LlmProviderException(Type.EMPTY_RESPONSE, "Provider returned no text.");
+        }
+
+        JsonNode usage = response.path("usageMetadata");
+        int inputTokens = usage.path("promptTokenCount").asInt(0);
+        int outputTokens = usage.path("candidatesTokenCount").asInt(0) + usage.path("thoughtsTokenCount").asInt(0);
+        return new LlmToolResponse(text.toString(), List.copyOf(calls), content, truncated,
+                inputTokens, outputTokens, properties.model(), latencyMs);
+    }
+
+    private static ToolCall toToolCall(JsonNode functionCall) {
+        String name = functionCall.path("name").stringValue(null);
+        JsonNode args = functionCall.path("args");
+        if (name == null || name.isBlank() || !(args.isObject() || args.isMissingNode() || args.isNull())) {
+            throw new LlmProviderException(Type.INVALID_RESPONSE, "Provider returned a malformed tool call.");
+        }
+        Map<String, Object> arguments = new LinkedHashMap<>();
+        if (args.isObject()) {
+            args.properties().forEach(e -> arguments.put(e.getKey(), toJava(e.getValue())));
+        }
+        return new ToolCall(functionCall.path("id").stringValue(null), name, arguments);
+    }
+
+    /** Converte um no JSON em tipos simples do Java, para o servico validar os argumentos. */
+    private static Object toJava(JsonNode node) {
+        if (node.isObject()) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            node.properties().forEach(e -> map.put(e.getKey(), toJava(e.getValue())));
+            return map;
+        }
+        if (node.isArray()) {
+            List<Object> list = new ArrayList<>();
+            node.forEach(item -> list.add(toJava(item)));
+            return list;
+        }
+        if (node.isString()) {
+            return node.stringValue();
+        }
+        if (node.isIntegralNumber()) {
+            return node.longValue();
+        }
+        if (node.isNumber()) {
+            return node.doubleValue();
+        }
+        if (node.isBoolean()) {
+            return node.booleanValue();
+        }
+        return null;
     }
 
     // --- Montagem da requisicao ---
@@ -93,13 +238,13 @@ public class GeminiLlmClient implements LlmClient {
 
     // --- Chamada com retry ---
 
-    private GeminiResponse callWithRetry(GeminiRequest body) {
+    private <T> T callWithRetry(Object body, Class<T> responseType) {
         int maxAttempts = properties.maxAttempts();
         LlmProviderException last = null;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                return call(body);
+                return call(body, responseType);
             } catch (LlmProviderException e) {
                 last = e;
                 if (!e.getType().isTransient() || attempt == maxAttempts) {
@@ -129,13 +274,13 @@ public class GeminiLlmClient implements LlmClient {
         }
     }
 
-    private GeminiResponse call(GeminiRequest body) {
+    private <T> T call(Object body, Class<T> responseType) {
         try {
-            GeminiResponse response = restClient.post()
+            T response = restClient.post()
                     .uri("/v1beta/models/{model}:generateContent", properties.model())
                     .body(body)
                     .retrieve()
-                    .body(GeminiResponse.class);
+                    .body(responseType);
             if (response == null) {
                 throw new LlmProviderException(Type.EMPTY_RESPONSE, "Provider returned an empty body.");
             }

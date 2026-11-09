@@ -416,4 +416,141 @@ class GeminiLlmClientTest {
         Map<String, Object> schema = WeeklyPlanSchema.schema();
         assertThat(schema).containsKeys("type", "properties", "required");
     }
+
+    // --- chamada com ferramentas (function calling) ---
+
+    private static final ToolSpec TOOL = new ToolSpec("tarefas_atrasadas", "Lista as tarefas atrasadas.",
+            Map.of("type", "object", "properties", Map.of(), "additionalProperties", false));
+
+    private static LlmToolRequest toolRequest(List<ToolExchange> history) {
+        return new LlmToolRequest("INSTRUCOES DO ASSISTENTE", "O que esta atrasado?", List.of(TOOL), history);
+    }
+
+    // Formato observado numa chamada real: functionCall com id e a assinatura de raciocinio na mesma parte.
+    private static final String TOOL_CALL_BODY = """
+            {"candidates":[{"content":{"role":"model","parts":[
+                {"functionCall":{"name":"tarefas_atrasadas","args":{"limite":3},"id":"call_123"},
+                 "thoughtSignature":"ASSINATURA-OPACA"}]},
+              "finishReason":"STOP"}],
+             "usageMetadata":{"promptTokenCount":89,"candidatesTokenCount":13,"thoughtsTokenCount":7}}
+            """;
+
+    private void assertChatFailsWith(Type expected) {
+        assertThatThrownBy(() -> client.chat(toolRequest(List.of())))
+                .isInstanceOfSatisfying(LlmProviderException.class,
+                        e -> assertThat(e.getType()).isEqualTo(expected));
+    }
+
+    @Test
+    void chat_ParsesAToolCallAndKeepsTheModelTurnUntouched() {
+        respondOnce(TOOL_CALL_BODY);
+
+        LlmToolResponse response = client.chat(toolRequest(List.of()));
+
+        assertThat(response.hasToolCalls()).isTrue();
+        assertThat(response.toolCalls()).singleElement().satisfies(call -> {
+            assertThat(call.id()).isEqualTo("call_123");
+            assertThat(call.name()).isEqualTo("tarefas_atrasadas");
+            assertThat(call.args()).containsExactly(Map.entry("limite", 3L));
+        });
+        assertThat(response.inputTokens()).isEqualTo(89);
+        assertThat(response.outputTokens()).isEqualTo(20);
+        assertThat(response.rawModelTurn().toString()).contains("ASSINATURA-OPACA");
+        server.verify();
+    }
+
+    @Test
+    void chat_SendsToolDeclarationsAndReplaysTheHistoryInTheDocumentedFormat() throws Exception {
+        respondOnce(TOOL_CALL_BODY);
+        LlmToolResponse first = client.chat(toolRequest(List.of()));
+        server.verify();
+
+        setUpWith(3);
+        AtomicReference<String> sentBody = new AtomicReference<>();
+        server.expect(ExpectedCount.once(), requestTo(URL))
+                .andExpect(header("x-goog-api-key", KEY))
+                .andExpect(request -> sentBody.set(((MockClientHttpRequest) request).getBodyAsString()))
+                .andRespond(withSuccess(okBody("Ha uma tarefa atrasada."), MediaType.APPLICATION_JSON));
+
+        ToolResult result = new ToolResult("call_123", "tarefas_atrasadas",
+                Map.of("total", 1, "itens", List.of(Map.of("indice", "T1", "titulo", "Pagar a conta de luz"))));
+        LlmToolResponse second = client.chat(toolRequest(
+                List.of(new ToolExchange(first.rawModelTurn(), List.of(result)))));
+
+        assertThat(second.hasToolCalls()).isFalse();
+        assertThat(second.text()).isEqualTo("Ha uma tarefa atrasada.");
+
+        JsonNode json = MAPPER.readTree(sentBody.get());
+        assertThat(json.at("/systemInstruction/parts/0/text").asString()).isEqualTo("INSTRUCOES DO ASSISTENTE");
+        assertThat(json.at("/tools/0/functionDeclarations/0/name").asString()).isEqualTo("tarefas_atrasadas");
+        assertThat(json.at("/tools/0/functionDeclarations/0/parametersJsonSchema/type").asString())
+                .isEqualTo("object");
+        assertThat(json.at("/generationConfig/maxOutputTokens").asInt()).isEqualTo(1234);
+        // conversa: pergunta -> turno do modelo intacto (com a assinatura) -> resultado em um turno "user"
+        assertThat(json.at("/contents/0/role").asString()).isEqualTo("user");
+        assertThat(json.at("/contents/0/parts/0/text").asString()).isEqualTo("O que esta atrasado?");
+        assertThat(json.at("/contents/1/role").asString()).isEqualTo("model");
+        assertThat(json.at("/contents/1/parts/0/functionCall/id").asString()).isEqualTo("call_123");
+        assertThat(json.at("/contents/1/parts/0/thoughtSignature").asString()).isEqualTo("ASSINATURA-OPACA");
+        assertThat(json.at("/contents/2/role").asString()).isEqualTo("user");
+        assertThat(json.at("/contents/2/parts/0/functionResponse/id").asString()).isEqualTo("call_123");
+        assertThat(json.at("/contents/2/parts/0/functionResponse/name").asString()).isEqualTo("tarefas_atrasadas");
+        assertThat(json.at("/contents/2/parts/0/functionResponse/response/itens/0/titulo").asString())
+                .isEqualTo("Pagar a conta de luz");
+        assertThat(sentBody.get()).doesNotContain(KEY);
+        server.verify();
+    }
+
+    @Test
+    void chat_IgnoresThoughtPartsInTheFinalText() {
+        respondOnce("""
+                {"candidates":[{"content":{"role":"model","parts":[
+                    {"text":"raciocinio interno","thought":true},{"text":"Resposta final."}]},
+                  "finishReason":"STOP"}]}
+                """);
+
+        assertThat(client.chat(toolRequest(List.of())).text()).isEqualTo("Resposta final.");
+    }
+
+    @Test
+    void chat_MalformedToolCallFromTheProvider_IsInvalidResponse() {
+        respondOnce("""
+                {"candidates":[{"content":{"role":"model","parts":[]},"finishReason":"MALFORMED_FUNCTION_CALL"}]}
+                """);
+        assertChatFailsWith(Type.INVALID_RESPONSE);
+
+        setUpWith(3);
+        respondOnce("""
+                {"candidates":[{"content":{"role":"model","parts":[
+                    {"functionCall":{"name":"tarefas_atrasadas","args":"nao e um objeto"}}]},"finishReason":"STOP"}]}
+                """);
+        assertChatFailsWith(Type.INVALID_RESPONSE);
+    }
+
+    @Test
+    void chat_BlockedEmptyAndTruncatedResponses() {
+        respondOnce("{\"promptFeedback\":{\"blockReason\":\"SAFETY\"}}");
+        assertChatFailsWith(Type.BLOCKED);
+
+        setUpWith(3);
+        respondOnce("{\"candidates\":[]}");
+        assertChatFailsWith(Type.EMPTY_RESPONSE);
+
+        setUpWith(3);
+        respondOnce("""
+                {"candidates":[{"content":{"role":"model","parts":[{"text":"Resposta cortad"}]},
+                  "finishReason":"MAX_TOKENS"}]}
+                """);
+        assertThat(client.chat(toolRequest(List.of())).truncated()).isTrue();
+    }
+
+    @Test
+    void chat_RetriesTransientErrors() {
+        server.expect(ExpectedCount.once(), requestTo(URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        server.expect(ExpectedCount.once(), requestTo(URL))
+                .andRespond(withSuccess(okBody("Tudo em dia."), MediaType.APPLICATION_JSON));
+
+        assertThat(client.chat(toolRequest(List.of())).text()).isEqualTo("Tudo em dia.");
+        server.verify();
+    }
 }
