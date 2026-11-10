@@ -13,10 +13,17 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Trava o render.yaml: o modulo de IA precisa nascer desligado em producao e a
- * chave do provedor nunca pode ter valor no arquivo versionado.
+ * Trava o render.yaml: nenhuma variavel do modulo de IA tem valor no arquivo
+ * versionado. Todas sao "sync: false", entao quem manda nelas e o painel do
+ * Render, e um sync do Blueprint nao sobrescreve o que foi definido la.
+ *
+ * Sem essas variaveis o modulo nasce desligado e sem provider por causa dos
+ * padroes do application-prod.yml (ver ProductionAiDefaultsTest).
  */
 class RenderBlueprintTest {
+
+    private static final List<String> AI_VARIABLES = List.of(
+            "LIFESYNC_AI_ENABLED", "LIFESYNC_AI_PROVIDER", "LIFESYNC_AI_ALLOWED_USERS", "LLM_API_KEY");
 
     @SuppressWarnings("unchecked")
     private Map<String, Map<String, Object>> envVars() throws IOException {
@@ -32,31 +39,24 @@ class RenderBlueprintTest {
     }
 
     @Test
-    void aiModule_IsDisabledWithNoProvider() throws IOException {
+    void aiVariables_AreDeclaredWithoutAnyValueInTheRepository() throws IOException {
         var env = envVars();
 
-        assertThat(env.get("LIFESYNC_AI_ENABLED").get("value")).isEqualTo("false");
-        assertThat(env).containsKey("LIFESYNC_AI_PROVIDER");
-        Object provider = env.get("LIFESYNC_AI_PROVIDER").get("value");
-        assertThat(provider == null || provider.toString().isEmpty()).isTrue();
+        for (String key : AI_VARIABLES) {
+            assertThat(env).as(key).containsKey(key);
+            assertThat(env.get(key).get("sync")).as(key + " sync").isEqualTo(false);
+            assertThat(env.get(key)).as(key + " value").doesNotContainKey("value");
+        }
     }
 
     @Test
-    void allowedUsers_ExistsWithoutAnyValueInTheRepository() throws IOException {
-        var allowed = envVars().get("LIFESYNC_AI_ALLOWED_USERS");
-
-        // Sem valor no repositorio: a lista (ids de contas) so e preenchida no painel, e vazia = ninguem.
-        assertThat(allowed).isNotNull();
-        assertThat(allowed.get("sync")).isEqualTo(false);
-        assertThat(allowed).doesNotContainKey("value");
-    }
-
-    @Test
-    void apiKey_IsASecretFilledInTheDashboard() throws IOException {
-        var key = envVars().get("LLM_API_KEY");
-
-        assertThat(key).isNotNull();
-        assertThat(key.get("sync")).isEqualTo(false);
-        assertThat(key).doesNotContainKey("value");
+    void noOtherAiVariable_HasAValueInTheRepository() throws IOException {
+        // Uma variavel de IA nova com "value" voltaria a ser sobrescrita a cada sync
+        // e poderia ligar o modulo por arquivo versionado.
+        envVars().forEach((key, env) -> {
+            if (key.startsWith("LIFESYNC_AI_") || key.startsWith("LLM_")) {
+                assertThat(env).as(key + " value").doesNotContainKey("value");
+            }
+        });
     }
 }

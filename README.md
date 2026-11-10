@@ -334,7 +334,7 @@ A rodada 1 foi reprovada por um falso positivo da própria checagem (o plano cit
 
 ## Testes
 
-**306 testes**, executados a cada push e pull request pelo CI (veja o badge no topo): 65 do núcleo (tabela abaixo) e 241 do módulo de IA. A maioria é unitária (Mockito, sem banco); os de integração sobem um PostgreSQL real com Testcontainers. Nenhum teste da suíte chama um LLM: o módulo de IA é testado com um servidor HTTP simulado e com o provedor de mentira.
+**307 testes**, executados a cada push e pull request pelo CI (veja o badge no topo): 65 do núcleo (tabela abaixo) e 242 do módulo de IA. A maioria é unitária (Mockito, sem banco); os de integração sobem um PostgreSQL real com Testcontainers. Nenhum teste da suíte chama um LLM: o módulo de IA é testado com um servidor HTTP simulado e com o provedor de mentira.
 
 | Classe | Tipo | Qtde. |
 |---|---|---|
@@ -357,7 +357,7 @@ O teste parametrizado do `HabitServiceTest` cobre as regras de streak por frequ�
 
 O teste de integração sobe o contexto Spring completo contra um container PostgreSQL, aplica as migrações Flyway (`V1` → `V3`) e, com `ddl-auto: validate`, falha se alguma entidade não bater com o schema.
 
-Os 241 testes do módulo de IA (`src/test/java/com/lifesync/api/ai`) cobrem, entre outros: o assistente (ferramenta inexistente, argumento inválido, limite de passos, tempo, injeção pelos títulos, usuário A nunca recebe dados do B), a lista de permitidos (usuário fora dela recebe `503` sem chamada ao provedor; o curinga `*` com o provedor `gemini` no perfil `prod` derruba a subida), o cliente do Gemini contra um servidor simulado (sucesso, 429, 5xx, timeout real, corpo malformado, bloqueio, resposta cortada), a validação da saída do modelo (JSON inválido, índice inventado, tipo incoerente), o contexto (só dados do usuário, saneamento e mascaramento dos títulos), a cota por fuso, o endpoint com JWT real (`401` sem token, usuário A nunca recebe item do B) e a varredura das métricas em busca de dados sensíveis.
+Os 242 testes do módulo de IA (`src/test/java/com/lifesync/api/ai`) cobrem, entre outros: o assistente (ferramenta inexistente, argumento inválido, limite de passos, tempo, injeção pelos títulos, usuário A nunca recebe dados do B), a lista de permitidos (usuário fora dela recebe `503` sem chamada ao provedor; o curinga `*` com o provedor `gemini` no perfil `prod` derruba a subida), o cliente do Gemini contra um servidor simulado (sucesso, 429, 5xx, timeout real, corpo malformado, bloqueio, resposta cortada), a validação da saída do modelo (JSON inválido, índice inventado, tipo incoerente), o contexto (só dados do usuário, saneamento e mascaramento dos títulos), a cota por fuso, o endpoint com JWT real (`401` sem token, usuário A nunca recebe item do B) e a varredura das métricas em busca de dados sensíveis.
 
 ---
 
@@ -431,7 +431,7 @@ O primeiro estágio compila com Maven; o segundo leva só o `.jar` para uma imag
 
 ### Infraestrutura como código
 
-O deploy no Render é definido em `render.yaml` (Blueprint): serviço, health check (`/actuator/health`) e variáveis de ambiente. As sensíveis ficam como `sync: false` e são preenchidas no painel, nunca no repositório.
+O deploy no Render é definido em `render.yaml` (Blueprint): serviço, health check (`/actuator/health`) e variáveis de ambiente. As sensíveis ficam como `sync: false` e são preenchidas no painel, nunca no repositório. As variáveis do módulo de IA (`LIFESYNC_AI_ENABLED`, `LIFESYNC_AI_PROVIDER`, `LIFESYNC_AI_ALLOWED_USERS` e `LLM_API_KEY`) também são `sync: false`, sem valor no arquivo: quem manda nelas é o painel, e um sync do Blueprint não as sobrescreve. Sem elas o módulo nasce desligado e sem provider, pelos padrões do `application-prod.yml`. Os testes `RenderBlueprintTest` e `ProductionAiDefaultsTest` travam as duas coisas.
 
 ---
 
