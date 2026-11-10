@@ -2,6 +2,7 @@ package com.lifesync.api.exception;
 
 import com.lifesync.api.ai.exception.AiDisabledException;
 import com.lifesync.api.ai.exception.AiQuotaExceededException;
+import com.lifesync.api.ai.exception.CoachAgentException;
 import com.lifesync.api.ai.exception.InvalidLlmOutputException;
 import com.lifesync.api.ai.exception.LlmProviderException;
 import com.lifesync.api.common.ApiErrorResponse;
@@ -267,6 +268,21 @@ public class GlobalExceptionHandler {
             return buildResponse(HttpStatus.GATEWAY_TIMEOUT, "The AI provider took too long to respond.", request);
         }
         return buildResponse(HttpStatus.BAD_GATEWAY, "The AI provider is unavailable or returned an error.", request);
+    }
+
+    /**
+     * O assistente parou por seguranca (ferramenta desconhecida, argumento
+     * invalido, limite de passos, resposta invalida) ou por tempo. Tempo vira
+     * 504; o resto, 502. So o tipo vai para o log; a mensagem e' fixa.
+     */
+    @ExceptionHandler(CoachAgentException.class)
+    public ResponseEntity<ApiErrorResponse> handleCoachAgentException(
+            CoachAgentException e, HttpServletRequest request) {
+        log.warn("AI assistant stopped: {}", e.getType());
+        if (e.getType() == CoachAgentException.Type.TIMEOUT) {
+            return buildResponse(HttpStatus.GATEWAY_TIMEOUT, "The AI assistant took too long to respond.", request);
+        }
+        return buildResponse(HttpStatus.BAD_GATEWAY, "The AI assistant could not complete the request.", request);
     }
 
     /** O provedor respondeu, mas a saida nao passou na validacao: 502. */

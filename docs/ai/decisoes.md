@@ -1,6 +1,6 @@
 # Módulo de IA: decisões de design
 
-> **Status:** em desenvolvimento. Este documento registra as decisões tomadas no desenho do módulo e o motivo de cada uma, para que quem ler o código no futuro entenda por que as coisas são como são. Ele é atualizado conforme o módulo evolui. Documentos relacionados: [ADR 0001](adr-0001-cliente-llm.md) (cliente LLM), [ADR 0002](adr-0002-provedor-llm.md) (provedor e política de dados) e [modelo de ameaças](modelo-ameacas.md).
+> **Status:** em desenvolvimento. Este documento registra as decisões tomadas no desenho do módulo e o motivo de cada uma, para que quem ler o código no futuro entenda por que as coisas são como são. Ele é atualizado conforme o módulo evolui. Documentos relacionados: [ADR 0001](adr-0001-cliente-llm.md) (cliente LLM), [ADR 0002](adr-0002-provedor-llm.md) (provedor e política de dados), [ADR 0003](adr-0003-agente-ferramentas.md) (assistente com ferramentas) e [modelo de ameaças](modelo-ameacas.md).
 
 ## Contexto
 
@@ -16,6 +16,7 @@ Fluxo de uma chamada: módulo ligado? → usuário na lista de permitidos? → c
 - **Por quê:** o assistente depende de coisas que o plano semanal já exige: a camada de acesso ao modelo, o controle de uso por usuário e os testes. Construí-lo antes seria empilhar complexidade sobre uma base ainda não validada. Prefiro ter algo pequeno funcionando de ponta a ponta antes de ampliar o escopo.
 - **O que isso custa:** enquanto isso o módulo tem menos recursos.
 - **Quando reavaliar:** quando o plano semanal estiver funcionando em produção e os testes estiverem passando no CI.
+- **Atualização:** com o plano semanal validado contra o provedor real, o assistente foi construído sobre a mesma base (decisão 9).
 
 ### 2. Não guardar o texto dos prompts no banco de dados
 
@@ -54,6 +55,12 @@ Fluxo de uma chamada: módulo ligado? → usuário na lista de permitidos? → c
 - **Decisão:** o `AiMetrics` (Micrometer) registra a duração da chamada ao provedor (`lifesync.ai.request.duration`), as chamadas por status (`lifesync.ai.requests`), os tokens de entrada e de saída (`lifesync.ai.tokens`) e os pedidos barrados antes do provedor, por módulo desligado ou cota excedida (`lifesync.ai.rejections`). As únicas tags são valores de enum e o nome do provedor.
 - **Por quê:** a classe nem recebe o texto do prompt, a resposta, o id do usuário nem a chave, então eles não têm como chegar a uma métrica. Um teste percorre todas as métricas depois de chamadas com textos "secretos" e prova que nada disso aparece.
 - **Consequências:** as métricas são lidas em `/actuator/metrics`, que exige token. Erro do provedor não informa tokens, então nesses casos os contadores de tokens não são incrementados (não se inventa valor). O id do usuário não é tag por causa da cardinalidade e da privacidade.
+
+### 9. Assistente: o modelo pede, o servidor decide
+
+- **Decisão:** `POST /api/ai/coach` responde a uma pergunta curta usando *function calling* com três ferramentas somente leitura. O loop é do servidor: ele valida cada pedido do modelo, executa a ferramenta sobre o contexto do usuário do token e limita passos, ferramentas por turno e tempo. Nenhuma ferramenta aceita id de usuário ou de item. Detalhes, fontes e alternativas no [ADR 0003](adr-0003-agente-ferramentas.md).
+- **Por quê:** quando o modelo passa a pedir ações, a pergunta deixa de ser "o texto está certo?" e vira "o que acontece se ele for enganado?". Com ferramentas de leitura, sem identificadores e com validação estrita, a resposta é: nada além de ler os dados do próprio usuário.
+- **O que isso custa:** uma pergunta leva de 1 a 4 chamadas ao provedor; a resposta é texto livre e só a forma é validada; o tempo total é conferido entre os passos, não durante uma chamada.
 
 ## Avaliação contra o provedor real
 
@@ -98,7 +105,8 @@ Registro do que deu errado ou surpreendeu durante a implementação e do que foi
 
 ## O que decidi não fazer (por enquanto)
 
-- **Assistente com ferramentas (tool calling):** ver a decisão 1.
+- **Ferramentas de escrita no assistente** (concluir tarefa, fazer check-in): exigiriam confirmação do usuário a cada ação; o assistente só lê (ADR 0003).
+- **Guardar a conversa do assistente:** cada pergunta é independente; não há histórico entre requisições.
 - **Guardar prompts e respostas:** ver a decisão 2.
 - **Spring AI:** o cliente é próprio (ver o ADR 0001); a compatibilidade com o Spring Boot 4.1 foi verificada e não é o motivo.
 - **Repetir a chamada quando a saída é inválida:** gastaria tokens e cota e esconderia a taxa de falha. A resposta inválida vira 502.

@@ -104,7 +104,7 @@ com.lifesync.api
 ├── task/         # Tarefas + subtarefas
 ├── habit/        # Hábitos + histórico de check-ins
 ├── goal/         # Metas + histórico de progresso
-├── ai/           # Plano semanal gerado por LLM (cliente, contexto, validação, cota, métricas)
+├── ai/           # Plano semanal e assistente com ferramentas (cliente LLM, contexto, validação, cota, métricas)
 └── LifesyncApiApplication.java
 ```
 
@@ -194,6 +194,7 @@ Todos os endpoints exigem `Authorization: Bearer <access_token>`, exceto os de `
 | Método | Rota | Descrição |
 |---|---|---|
 | `POST` | `/api/ai/weekly-plan` | Gera o plano semanal do usuário autenticado (sem corpo). Em produção o módulo está desligado e a rota responde `503`. |
+| `POST` | `/api/ai/coach` | Pergunta curta ao assistente, que consulta os dados do usuário por ferramentas somente leitura. |
 
 ---
 
@@ -282,6 +283,41 @@ Sem o perfil `prod`, o `application.yml` já sobe o módulo ligado com `lifesync
 
 O provedor de mentira devolve um plano fixo que aponta para o primeiro item de cada tipo do usuário; ele serve para exercitar o fluxo (cota, validação, ids), não para avaliar o texto. A cota local é de 5 planos por dia; a sexta chamada responde `429`. Esse mesmo fluxo, com banco real, é coberto por `AiWeeklyPlanFlowIntegrationTest`.
 
+### Assistente com ferramentas
+
+`POST /api/ai/coach` recebe uma pergunta curta (`{"question": "O que está atrasado?"}`) e responde em texto. Aqui o modelo usa *function calling*: em vez de receber todo o contexto, ele pede os dados por três ferramentas **somente leitura** (`tarefas_atrasadas`, `habitos_em_risco`, `progresso_das_metas`).
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as CoachService
+    participant M as Modelo (Gemini)
+    C->>S: POST /api/ai/coach (JWT + pergunta)
+    S->>S: módulo ligado, lista de permitidos, cota
+    S->>S: lê o contexto do usuário do token (uma vez)
+    loop no máximo 4 chamadas e 45 s
+        S->>M: pergunta + ferramentas + passos anteriores
+        alt o modelo pede ferramentas
+            M-->>S: functionCall (nome, argumentos)
+            S->>S: valida nome e argumentos, executa sobre o contexto
+        else o modelo responde
+            M-->>S: texto
+        end
+    end
+    S->>S: valida a resposta final
+    S-->>C: resposta, ferramentas usadas, passos
+```
+
+O desenho assume que o modelo pode ser enganado por um título malicioso e garante que, mesmo assim, ele só consegue ler dados do próprio usuário:
+
+- **O loop é do servidor.** O modelo só pede; quem valida, executa e decide parar é o `CoachService`.
+- **Nenhuma ferramenta aceita id de usuário ou de item.** Elas filtram o contexto já montado para o usuário do token; não existe pedido que alcance outra pessoa.
+- **Pedido inválido encerra a conversa.** Ferramenta desconhecida, argumento desconhecido (inclusive um `userId`), tipo errado ou valor fora do intervalo viram erro tipado (`502`), sem executar nada.
+- **Travas:** 4 chamadas ao modelo por pergunta, 3 ferramentas por turno, 45 s no total, resposta final limitada e saneada.
+- **Mesma base do plano semanal:** lista de permitidos, cota, log só com metadados (um registro por chamada), métricas e erros.
+
+Em três perguntas reais ao Gemini (2026-11-09, dados sintéticos), as três foram respondidas: a que precisava de dados usou duas ferramentas em um turno; a que tinha instruções nos títulos apenas listou os títulos como tarefas; a fora do assunto foi recusada sem consultar nada. Formato da API, fontes, alternativas e limites no [ADR 0003](docs/ai/adr-0003-agente-ferramentas.md).
+
 ### Avaliação contra o provedor real
 
 Um teste com a tag `live`, fora da suíte padrão e do CI, roda 10 cenários sintéticos contra o Gemini e mede taxa de saída válida, latência e tokens ([como rodar](docs/ai/avaliacao.md)). Execução de 2026-11-09, modelo `gemini-3.5-flash-lite`, camada gratuita:
@@ -298,7 +334,7 @@ A rodada 1 foi reprovada por um falso positivo da própria checagem (o plano cit
 
 ## Testes
 
-**266 testes**, executados a cada push e pull request pelo CI (veja o badge no topo): 65 do núcleo (tabela abaixo) e 201 do módulo de IA. A maioria é unitária (Mockito, sem banco); os de integração sobem um PostgreSQL real com Testcontainers. Nenhum teste da suíte chama um LLM: o módulo de IA é testado com um servidor HTTP simulado e com o provedor de mentira.
+**306 testes**, executados a cada push e pull request pelo CI (veja o badge no topo): 65 do núcleo (tabela abaixo) e 241 do módulo de IA. A maioria é unitária (Mockito, sem banco); os de integração sobem um PostgreSQL real com Testcontainers. Nenhum teste da suíte chama um LLM: o módulo de IA é testado com um servidor HTTP simulado e com o provedor de mentira.
 
 | Classe | Tipo | Qtde. |
 |---|---|---|
@@ -321,7 +357,7 @@ O teste parametrizado do `HabitServiceTest` cobre as regras de streak por frequ�
 
 O teste de integração sobe o contexto Spring completo contra um container PostgreSQL, aplica as migrações Flyway (`V1` → `V3`) e, com `ddl-auto: validate`, falha se alguma entidade não bater com o schema.
 
-Os 201 testes do módulo de IA (`src/test/java/com/lifesync/api/ai`) cobrem, entre outros: a lista de permitidos (usuário fora dela recebe `503` sem chamada ao provedor), o cliente do Gemini contra um servidor simulado (sucesso, 429, 5xx, timeout real, corpo malformado, bloqueio, resposta cortada), a validação da saída do modelo (JSON inválido, índice inventado, tipo incoerente), o contexto (só dados do usuário, saneamento e mascaramento dos títulos), a cota por fuso, o endpoint com JWT real (`401` sem token, usuário A nunca recebe item do B) e a varredura das métricas em busca de dados sensíveis.
+Os 241 testes do módulo de IA (`src/test/java/com/lifesync/api/ai`) cobrem, entre outros: o assistente (ferramenta inexistente, argumento inválido, limite de passos, tempo, injeção pelos títulos, usuário A nunca recebe dados do B), a lista de permitidos (usuário fora dela recebe `503` sem chamada ao provedor; o curinga `*` com o provedor `gemini` no perfil `prod` derruba a subida), o cliente do Gemini contra um servidor simulado (sucesso, 429, 5xx, timeout real, corpo malformado, bloqueio, resposta cortada), a validação da saída do modelo (JSON inválido, índice inventado, tipo incoerente), o contexto (só dados do usuário, saneamento e mascaramento dos títulos), a cota por fuso, o endpoint com JWT real (`401` sem token, usuário A nunca recebe item do B) e a varredura das métricas em busca de dados sensíveis.
 
 ---
 

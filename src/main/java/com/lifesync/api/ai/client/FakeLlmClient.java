@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -43,6 +44,22 @@ public class FakeLlmClient implements LlmClient {
                 """.formatted(String.join(", ", priorities));
 
         return new LlmResponse(json, 150, 100, "fake-model", 1);
+    }
+
+    /**
+     * Conversa simulada em dois passos: primeiro pede a ferramenta
+     * tarefas_atrasadas; com o resultado em maos, responde em texto.
+     */
+    @Override
+    public LlmToolResponse chat(LlmToolRequest request) {
+        if (request.history().isEmpty()) {
+            ToolCall call = new ToolCall("fake-call-1", "tarefas_atrasadas", Map.of());
+            Map<String, Object> rawTurn = Map.of("role", "model", "parts", List.of(
+                    Map.of("functionCall", Map.of("id", call.id(), "name", call.name(), "args", Map.of()))));
+            return new LlmToolResponse("", List.of(call), rawTurn, false, 120, 10, "fake-model", 1);
+        }
+        return new LlmToolResponse("Resposta do modo de teste (Fake): consultei suas tarefas atrasadas.",
+                List.of(), null, false, 160, 20, "fake-model", 1);
     }
 
     private static void addFirstOf(String prefix, String type, String contextJson, List<String> out) {
