@@ -25,3 +25,19 @@ services:
         value: "604800000"
       - key: APP_CORS_ALLOWED_ORIGINS
         sync: false
+      # Modulo de IA: nenhuma variavel tem valor aqui, todas sao definidas no
+      # painel do Render (um sync do Blueprint nao sobrescreve "sync: false").
+      # Sem elas o modulo nasce desligado e sem provider: os padroes estao no
+      # application-prod.yml. Para ligar: LIFESYNC_AI_ENABLED=true e
+      # LIFESYNC_AI_PROVIDER=gemini no painel.
+      - key: LIFESYNC_AI_ENABLED
+        sync: false
+      - key: LIFESYNC_AI_PROVIDER
+        sync: false
+      # Lista de permitidos: ids (UUID) das contas que podem usar a IA, separados
+      # por virgula. Sem valor no repositorio; vazia = ninguem usa, mesmo ligado.
+      - key: LIFESYNC_AI_ALLOWED_USERS
+        sync: false
+      # Chave do provedor: nunca no repositorio; preenchida no painel do Render.
+      - key: LLM_API_KEY
+        sync: false

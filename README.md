@@ -21,12 +21,13 @@
 3. [Stack técnica](#stack-técnica)
 4. [Arquitetura](#arquitetura)
 5. [Endpoints da API](#endpoints-da-api)
-6. [Testes](#testes)
-7. [Como rodar localmente](#como-rodar-localmente)
-8. [Variáveis de ambiente](#variáveis-de-ambiente)
-9. [Deploy](#deploy)
-10. [Licença](#licença)
-11. [Autor](#autor)
+6. [Módulo de IA](#módulo-de-ia)
+7. [Testes](#testes)
+8. [Como rodar localmente](#como-rodar-localmente)
+9. [Variáveis de ambiente](#variáveis-de-ambiente)
+10. [Deploy](#deploy)
+11. [Licença](#licença)
+12. [Autor](#autor)
 
 ---
 
@@ -103,6 +104,7 @@ com.lifesync.api
 ├── task/         # Tarefas + subtarefas
 ├── habit/        # Hábitos + histórico de check-ins
 ├── goal/         # Metas + histórico de progresso
+├── ai/           # Plano semanal e assistente com ferramentas (cliente LLM, contexto, validação, cota, métricas)
 └── LifesyncApiApplication.java
 ```
 
@@ -123,6 +125,7 @@ com.lifesync.api
 |---|---|
 | `V1__create_lifesync_schema.sql` | Schema base: `users`, `tasks`, `sub_tasks`, `habits`, `habit_history`. |
 | `V2__create_goals_and_link_task_habit.sql` | Cria `goals` e `goal_progress`; adiciona FK `goal_id` em `tasks` e `habits`. |
+| `V3__create_ai_request_log.sql` | Cria `tb_ai_request_logs`: uma linha de metadados por chamada ao LLM (sem o texto do prompt nem da resposta). |
 
 ---
 
@@ -186,11 +189,152 @@ Todos os endpoints exigem `Authorization: Bearer <access_token>`, exceto os de `
 | `POST` | `/api/goals/{goalId}/progress` | Registra progresso (valor absoluto) |
 | `GET` | `/api/goals/{goalId}/progress` | Histórico de progresso |
 
+#### IA
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `POST` | `/api/ai/weekly-plan` | Gera o plano semanal do usuário autenticado (sem corpo). Em produção o módulo está desligado e a rota responde `503`. |
+| `POST` | `/api/ai/coach` | Pergunta curta ao assistente, que consulta os dados do usuário por ferramentas somente leitura. |
+
+---
+
+## Módulo de IA
+
+`POST /api/ai/weekly-plan` lê as tarefas em aberto, os hábitos ativos e as metas em andamento do usuário do token, envia um resumo minimizado a um modelo de linguagem (Gemini) e devolve um plano semanal estruturado: resumo, prioridades, riscos e sugestões por dia. A resposta do modelo é tratada como entrada não confiável e só chega ao cliente depois de validada.
+
+**Estado:** o módulo está **desligado em produção** (a rota responde `503`). Quando ligado, ele só atende os usuários de uma lista de permitidos, pensada para uma conta de demonstração com dados sintéticos; o motivo está no [ADR 0002](docs/ai/adr-0002-provedor-llm.md). Localmente ele roda com um provedor de mentira, sem chave e sem rede.
+
+### Fluxo de uma chamada
+
+```mermaid
+flowchart TD
+    A[POST /api/ai/weekly-plan<br/>JWT: o usuário é o do token] --> B{Módulo ligado?}
+    B -- não --> E503[503]
+    B -- sim --> P{Usuário na lista<br/>de permitidos?}
+    P -- não --> E503
+    P -- sim --> C{Cota diária do usuário}
+    C -- esgotada --> E429[429]
+    C -- ok --> D[ContextBuilder<br/>só dados do usuário, minimizados,<br/>itens por índice T1, H1, G1]
+    D -- sem itens --> V[200 com plano vazio<br/>sem chamar o modelo]
+    D --> F[LlmClient: Gemini<br/>instruções em systemInstruction,<br/>dados em user_data, esquema JSON]
+    F -- erro ou timeout<br/>após tentativas limitadas --> E502[502 / 504]
+    F --> G{Validação da saída<br/>JSON, formato, índice existe,<br/>tipo coerente}
+    G -- inválida --> E502b[502]
+    G -- válida --> H[Troca índices por ids reais<br/>no servidor]
+    H --> I[200 com o plano]
+    F -.-> L[(Log e métricas<br/>só metadados)]
+    G -.-> L
+```
+
+### Decisões principais
+
+- **Cliente HTTP próprio atrás de uma interface.** O Gemini é chamado por `RestClient`, atrás de `LlmClient`; trocar de provedor é mudar uma classe. O motivo não é incompatibilidade do Spring AI, e sim controle sobre a requisição e os erros ([ADR 0001](docs/ai/adr-0001-cliente-llm.md)).
+- **O modelo nunca vê nem devolve ids reais.** Cada item vai com um índice curto (`T1`, `H1`, `G1`). O servidor guarda o mapa e só aceita índices que ele mesmo enviou, então um item inventado é rejeitado e é impossível apontar para o item de outro usuário.
+- **Saída do modelo é entrada não confiável.** O esquema JSON enviado ao provedor é só um guia; o servidor valida de novo (formato, tamanhos, tipo, índice existente). Saída inválida vira `502` e é registrada, em vez de ser "consertada": a taxa de saídas inválidas é a medida de qualidade do prompt.
+- **Falha fechada.** O cliente de mentira só existe com `lifesync.ai.provider=fake`; sem provider não há cliente algum e a rota responde `503`. Configuração incoerente (módulo ligado sem chave, por exemplo) derruba a subida da aplicação.
+- **Lista de permitidos.** Mesmo ligado, o módulo só atende os ids de usuário em `LIFESYNC_AI_ALLOWED_USERS`. Lista vazia significa ninguém, um id inválido derruba a subida, e quem está fora recebe o mesmo `503` do módulo desligado, sem chamada ao provedor nem registro.
+- **Cota diária calculada pelo próprio log**, no fuso do usuário, com um teto em 24 horas corridas que não depende do fuso (trocar o fuso do perfil não zera a contagem).
+- **Erros com dono.** `429` é a cota do usuário, `503` é o módulo desligado, `502` é o provedor que falhou ou devolveu algo inválido, `504` é o provedor que demorou. Só erros passageiros (429, 5xx e timeout do provedor) são repetidos, com espera crescente e número máximo de tentativas.
+
+O porquê de cada uma, o que foi descartado e o que ainda não foi verificado estão em [docs/ai/decisoes.md](docs/ai/decisoes.md).
+
+### Segurança e LGPD
+
+- **O que sai da API:** títulos de tarefas, nomes de hábitos e títulos de metas, com prioridade, datas, sequência e progresso. **Não saem:** nome, e-mail, username, senha, ids e descrições.
+- **Títulos são texto livre**, então são saneados antes do envio: sem quebras de linha nem caracteres invisíveis, tamanho e quantidade limitados, e-mails, CPFs e números longos mascarados. O mascaramento é de melhor esforço: nomes próprios e telefones curtos passam.
+- **Prompt injection:** as instruções ficam em `systemInstruction`; os dados do usuário vão separados, dentro de `<user_data>`, com `<` e `>` escapados para o conteúdo não fechar a tag. Nenhuma defesa de prompt é completa, por isso a saída é validada e os ids são resolvidos no servidor.
+- **O log não guarda o texto do prompt nem da resposta**, só metadados (quem, quando, modelo, tokens, duração, status). As métricas só têm números e enums.
+- **Chave do provedor** só em variável de ambiente (`LLM_API_KEY`), enviada em header, nunca em URL, log ou `toString`.
+- **Política de dados do provedor:** na camada gratuita do Gemini o conteúdo pode ser usado para melhorar produtos e lido por revisores humanos. Por isso ela só foi usada com dados sintéticos, o módulo fica desligado em produção e, se for ligado, a lista de permitidos o restringe a uma conta de demonstração ([ADR 0002](docs/ai/adr-0002-provedor-llm.md)).
+
+Cada ameaça, com a mitigação, o estado e o risco que sobra, está no [modelo de ameaças](docs/ai/modelo-ameacas.md).
+
+### Exemplo de resposta
+
+Resposta real do Gemini para um dos casos sintéticos da avaliação (um hábito diário com 21 dias de sequência e sem check-in hoje, um hábito semanal em dia e uma tarefa para dali a quatro dias); os ids são do banco de teste:
+
+```json
+{
+  "summary": "Esta semana temos uma ótima oportunidade para manter a consistência nos hábitos e organizar pendências de saúde.",
+  "priorities": [
+    { "type": "HABIT", "id": "663f36cb-ae24-4db8-b44b-c64fc3d31251", "reason": "Hábito importante com risco de perder a sequência se não for mantido." },
+    { "type": "TASK", "id": "2c9dbb6b-cb96-4a6f-be1f-d6ea7246a03a", "reason": "Tarefa pendente com prazo para a metade da semana." }
+  ],
+  "risks": ["Deixar de meditar e perder a sequência acumulada de dias."],
+  "schedule": {
+    "MONDAY": ["Praticar o hábito Meditar 10 minutos."],
+    "TUESDAY": ["Praticar o hábito Meditar 10 minutos."],
+    "WEDNESDAY": ["Praticar o hábito Meditar 10 minutos."],
+    "THURSDAY": ["Marcar consulta no dentista.", "Praticar o hábito Meditar 10 minutos."],
+    "FRIDAY": ["Praticar o hábito Meditar 10 minutos."],
+    "SATURDAY": ["Praticar o hábito Meditar 10 minutos."],
+    "SUNDAY": ["Praticar o hábito Meditar 10 minutos."]
+  }
+}
+```
+
+### Como rodar localmente com o provedor de mentira
+
+Sem o perfil `prod`, o `application.yml` já sobe o módulo ligado com `lifesync.ai.provider=fake` e a lista de permitidos aberta (`*`): nenhuma chamada de rede, nenhuma chave. Com a aplicação rodando (ver [Como rodar localmente](#como-rodar-localmente)):
+
+1. Registre um usuário em `POST /api/auth/register` e use o `accessToken`.
+2. Crie ao menos uma tarefa, um hábito ou uma meta (sem itens, a resposta é um plano vazio).
+3. Chame `POST /api/ai/weekly-plan`, sem corpo.
+
+O provedor de mentira devolve um plano fixo que aponta para o primeiro item de cada tipo do usuário; ele serve para exercitar o fluxo (cota, validação, ids), não para avaliar o texto. A cota local é de 5 planos por dia; a sexta chamada responde `429`. Esse mesmo fluxo, com banco real, é coberto por `AiWeeklyPlanFlowIntegrationTest`.
+
+### Assistente com ferramentas
+
+`POST /api/ai/coach` recebe uma pergunta curta (`{"question": "O que está atrasado?"}`) e responde em texto. Aqui o modelo usa *function calling*: em vez de receber todo o contexto, ele pede os dados por três ferramentas **somente leitura** (`tarefas_atrasadas`, `habitos_em_risco`, `progresso_das_metas`).
+
+```mermaid
+sequenceDiagram
+    participant C as Cliente
+    participant S as CoachService
+    participant M as Modelo (Gemini)
+    C->>S: POST /api/ai/coach (JWT + pergunta)
+    S->>S: módulo ligado, lista de permitidos, cota
+    S->>S: lê o contexto do usuário do token (uma vez)
+    loop no máximo 4 chamadas e 45 s
+        S->>M: pergunta + ferramentas + passos anteriores
+        alt o modelo pede ferramentas
+            M-->>S: functionCall (nome, argumentos)
+            S->>S: valida nome e argumentos, executa sobre o contexto
+        else o modelo responde
+            M-->>S: texto
+        end
+    end
+    S->>S: valida a resposta final
+    S-->>C: resposta, ferramentas usadas, passos
+```
+
+O desenho assume que o modelo pode ser enganado por um título malicioso e garante que, mesmo assim, ele só consegue ler dados do próprio usuário:
+
+- **O loop é do servidor.** O modelo só pede; quem valida, executa e decide parar é o `CoachService`.
+- **Nenhuma ferramenta aceita id de usuário ou de item.** Elas filtram o contexto já montado para o usuário do token; não existe pedido que alcance outra pessoa.
+- **Pedido inválido encerra a conversa.** Ferramenta desconhecida, argumento desconhecido (inclusive um `userId`), tipo errado ou valor fora do intervalo viram erro tipado (`502`), sem executar nada.
+- **Travas:** 4 chamadas ao modelo por pergunta, 3 ferramentas por turno, 45 s no total, resposta final limitada e saneada.
+- **Mesma base do plano semanal:** lista de permitidos, cota, log só com metadados (um registro por chamada), métricas e erros.
+
+Em três perguntas reais ao Gemini (2026-11-09, dados sintéticos), as três foram respondidas: a que precisava de dados usou duas ferramentas em um turno; a que tinha instruções nos títulos apenas listou os títulos como tarefas; a fora do assunto foi recusada sem consultar nada. Formato da API, fontes, alternativas e limites no [ADR 0003](docs/ai/adr-0003-agente-ferramentas.md).
+
+### Avaliação contra o provedor real
+
+Um teste com a tag `live`, fora da suíte padrão e do CI, roda 10 cenários sintéticos contra o Gemini e mede taxa de saída válida, latência e tokens ([como rodar](docs/ai/avaliacao.md)). Execução de 2026-11-09, modelo `gemini-3.5-flash-lite`, camada gratuita:
+
+| | Rodada 1 | Rodada 2 |
+|---|---|---|
+| Saídas válidas (9 casos chamam o provedor) | 9 de 9 | 9 de 9 |
+| Latência: mediana / média / máxima | 1,8 s / 2,6 s / 8,2 s | 2,1 s / 3,8 s / 17,8 s |
+| Tokens de entrada / saída (soma) | 7762 / 3086 | 7762 / 3187 |
+
+A rodada 1 foi reprovada por um falso positivo da própria checagem (o plano citava o título de uma tarefa que continha o texto procurado); a checagem foi corrigida e a rodada 2 passou. No caso com instruções maliciosas nos títulos, o modelo não as obedeceu. São 18 chamadas em um dia: a medição diz que a saída é válida, não que o plano é bom. Detalhes e limites em [docs/ai/decisoes.md](docs/ai/decisoes.md#avaliação-contra-o-provedor-real).
+
 ---
 
 ## Testes
 
-**65 testes**, executados a cada push e pull request pelo CI (veja o badge no topo). A maioria é unitária (Mockito, sem banco); o teste de integração sobe um PostgreSQL real com Testcontainers.
+**307 testes**, executados a cada push e pull request pelo CI (veja o badge no topo): 65 do núcleo (tabela abaixo) e 242 do módulo de IA. A maioria é unitária (Mockito, sem banco); os de integração sobem um PostgreSQL real com Testcontainers. Nenhum teste da suíte chama um LLM: o módulo de IA é testado com um servidor HTTP simulado e com o provedor de mentira.
 
 | Classe | Tipo | Qtde. |
 |---|---|---|
@@ -211,7 +355,9 @@ Todos os endpoints exigem `Authorization: Bearer <access_token>`, exceto os de `
 
 O teste parametrizado do `HabitServiceTest` cobre as regras de streak por frequência: período consecutivo, mesmo período, lacuna e troca de frequência, para `DAILY`, `WEEKLY` e `MONTHLY`.
 
-O teste de integração sobe o contexto Spring completo contra um container PostgreSQL, aplica as migrações Flyway (`V1` → `V2`) e, com `ddl-auto: validate`, falha se alguma entidade não bater com o schema.
+O teste de integração sobe o contexto Spring completo contra um container PostgreSQL, aplica as migrações Flyway (`V1` → `V3`) e, com `ddl-auto: validate`, falha se alguma entidade não bater com o schema.
+
+Os 242 testes do módulo de IA (`src/test/java/com/lifesync/api/ai`) cobrem, entre outros: o assistente (ferramenta inexistente, argumento inválido, limite de passos, tempo, injeção pelos títulos, usuário A nunca recebe dados do B), a lista de permitidos (usuário fora dela recebe `503` sem chamada ao provedor; o curinga `*` com o provedor `gemini` no perfil `prod` derruba a subida), o cliente do Gemini contra um servidor simulado (sucesso, 429, 5xx, timeout real, corpo malformado, bloqueio, resposta cortada), a validação da saída do modelo (JSON inválido, índice inventado, tipo incoerente), o contexto (só dados do usuário, saneamento e mascaramento dos títulos), a cota por fuso, o endpoint com JWT real (`401` sem token, usuário A nunca recebe item do B) e a varredura das métricas em busca de dados sensíveis.
 
 ---
 
@@ -250,6 +396,11 @@ Sem variáveis de ambiente configuradas, a aplicação sobe com os valores de fa
 | `JWT_REFRESH_EXPIRATION` | `604800000` (7 dias) | Validade do refresh token, em ms |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Origens permitidas no CORS (CSV) |
 | `PORT` | `8080` | Porta HTTP (injetada automaticamente pelo Render) |
+| `LIFESYNC_AI_ENABLED` | `true` (dev) / `false` (prod) | Liga o módulo de IA; desligado, a rota responde `503` |
+| `LIFESYNC_AI_PROVIDER` | `fake` (dev) / vazio (prod) | `fake` (sem rede) ou `gemini`; vazio = nenhum cliente |
+| `LIFESYNC_AI_ALLOWED_USERS` | `*` (dev) / vazio (prod) | Ids (UUID) dos usuários que podem usar a IA, separados por vírgula; vazio = ninguém. O `*` é só para desenvolvimento; no perfil `prod` com o provider `gemini` ele derruba a subida |
+| `LLM_API_KEY` | (nenhum) | Chave do provedor; obrigatória só com o provider `gemini` |
+| `LIFESYNC_AI_MODEL` | `gemini-3.5-flash-lite` | Modelo usado pelo provider `gemini` |
 
 ---
 
@@ -280,7 +431,7 @@ O primeiro estágio compila com Maven; o segundo leva só o `.jar` para uma imag
 
 ### Infraestrutura como código
 
-O deploy no Render é definido em `render.yaml` (Blueprint): serviço, health check (`/actuator/health`) e variáveis de ambiente. As sensíveis ficam como `sync: false` e são preenchidas no painel, nunca no repositório.
+O deploy no Render é definido em `render.yaml` (Blueprint): serviço, health check (`/actuator/health`) e variáveis de ambiente. As sensíveis ficam como `sync: false` e são preenchidas no painel, nunca no repositório. As variáveis do módulo de IA (`LIFESYNC_AI_ENABLED`, `LIFESYNC_AI_PROVIDER`, `LIFESYNC_AI_ALLOWED_USERS` e `LLM_API_KEY`) também são `sync: false`, sem valor no arquivo: quem manda nelas é o painel, e um sync do Blueprint não as sobrescreve. Sem elas o módulo nasce desligado e sem provider, pelos padrões do `application-prod.yml`. Os testes `RenderBlueprintTest` e `ProductionAiDefaultsTest` travam as duas coisas.
 
 ---
 
